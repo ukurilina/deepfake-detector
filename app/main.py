@@ -7,7 +7,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import AppConfig
+from app.config import AppConfig, SUPPORTED_IMAGE_EXTENSIONS
 from app.model import predict_deepfake_probability, initialize_models, get_available_models
 
 # Инициализация FastAPI приложения
@@ -108,56 +108,53 @@ async def detect(
         JSON с результатами детекции
     """
 
-    # Проверяем доступность моделей
     available_models = get_available_models()
     if not available_models:
         raise HTTPException(status_code=503, detail="No models loaded. Service unavailable.")
 
-    # Проверяем, что файл является изображением
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are supported")
 
-    # Проверяем размер файла
+    filename = file.filename or "image"
+    suffix = os.path.splitext(filename)[1].lower()
+    if suffix and suffix not in SUPPORTED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported image extension '{suffix}'. Allowed: {', '.join(sorted(SUPPORTED_IMAGE_EXTENSIONS))}"
+        )
+
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
     if len(content) > AppConfig.MAX_FILE_SIZE:
         raise HTTPException(
             status_code=413,
             detail=f"File too large. Max size: {AppConfig.MAX_FILE_SIZE / 1024 / 1024:.0f} MB"
         )
 
-    # Проверяем наличие модели в списке доступных
     if model and model not in available_models:
         raise HTTPException(
             status_code=404,
             detail=f"Model '{model}' not found. Available models: {', '.join(available_models)}"
         )
 
-    # Сохраняем во временный файл и выполняем анализ
-    suffix = os.path.splitext(file.filename or "image")[1]
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=AppConfig.TEMP_DIR) as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or ".jpg", dir=AppConfig.TEMP_DIR) as tmp:
             tmp.write(content)
             tmp.flush()
             tmp_path = tmp.name
 
         try:
-            # Запускаем модель
-            result = predict_deepfake_probability(
+            return predict_deepfake_probability(
                 tmp_path,
                 model_name=model,
                 threshold=threshold
             )
-
-            # Дополняем результат процентами
-            result["percent"] = result["probability"] * 100.0
-
-            return result
-
         finally:
-            # Удаляем временный файл
             try:
                 os.unlink(tmp_path)
-            except Exception as e:
+            except OSError:
                 pass
 
     except ValueError as e:

@@ -2,6 +2,8 @@ from typing import Dict, Optional, List
 import os
 import tensorflow as tf
 
+from app.config import AppConfig
+
 
 class ModelManager:
     """Менеджер для загрузки и управления ML моделями."""
@@ -17,9 +19,7 @@ class ModelManager:
 
     def __init__(self):
         """Инициализация менеджера моделей."""
-        self.models_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "models"
-        )
+        self.models_dir = AppConfig.MODELS_DIR
 
     def load_model(self, model_name: str, model_path: str) -> bool:
         """
@@ -34,6 +34,7 @@ class ModelManager:
         """
         try:
             if not os.path.exists(model_path):
+                self._model_configs[model_name] = {"path": model_path, "loaded": False}
                 return False
 
             model = tf.keras.models.load_model(model_path)
@@ -44,7 +45,8 @@ class ModelManager:
             }
             return True
 
-        except Exception as e:
+        except Exception:
+            self._model_configs[model_name] = {"path": model_path, "loaded": False}
             return False
 
     def load_all_models_from_directory(self) -> Dict[str, bool]:
@@ -55,15 +57,18 @@ class ModelManager:
             Dict с результатами загрузки каждой модели
         """
         results = {}
+        self._models.clear()
+        self._model_configs.clear()
 
         if not os.path.exists(self.models_dir):
             return results
 
-        for filename in os.listdir(self.models_dir):
-            if filename.endswith(".keras"):
-                model_name = filename.replace(".keras", "")
-                model_path = os.path.join(self.models_dir, filename)
-                results[model_name] = self.load_model(model_name, model_path)
+        for filename in sorted(os.listdir(self.models_dir)):
+            if not filename.lower().endswith(".keras"):
+                continue
+            model_name = filename[:-6]
+            model_path = os.path.join(self.models_dir, filename)
+            results[model_name] = self.load_model(model_name, model_path)
 
         return results
 

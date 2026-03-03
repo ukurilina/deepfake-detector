@@ -1,0 +1,20 @@
+оversion: "3.9"
+
+services:
+  deepfake-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      USE_GPU: "false"
+      ENABLE_CACHING: "false"
+      ENABLE_VIDEO_SUPPORT: "false"
+    volumes:
+      - ./models:/app/models:ro
+      - ./temp:/app/temp
+    restart: unless-stopped
+

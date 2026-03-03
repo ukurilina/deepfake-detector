@@ -38,36 +38,86 @@ def preprocess_image(image_path: str, target_size: Tuple[int, int] = AppConfig.T
         raise ValueError(f"Cannot process image: {str(e)}")
 
 
+def _extract_probability(preds: np.ndarray) -> float:
+    """Извлекает вероятность deepfake из предсказания модели в разных форматах."""
+    arr = np.asarray(preds, dtype="float32")
+
+    if arr.size == 0:
+        raise ValueError("Model returned empty prediction")
+
+    # Сводим предсказание к одномерному вектору для одного примера
+    sample = arr[0] if arr.ndim > 1 else arr
+    flat = np.ravel(sample)
+
+    if flat.size == 1:
+        prob = float(flat[0])
+    else:
+        # Для бинарной softmax-модели считаем deepfake вторым классом
+        prob = float(flat[1]) if flat.size >= 2 else float(flat[0])
+
+    return max(0.0, min(1.0, prob))
+
+
+def _build_model_inputs(model, image_tensor: np.ndarray):
+    """Готовит входы для моделей с 1+ входами (включая вспомогательные входы)."""
+    inputs = getattr(model, "inputs", None) or []
+    if len(inputs) <= 1:
+        return image_tensor
+
+    prepared_inputs = []
+    batch_size = image_tensor.shape[0]
+
+    for model_input in inputs:
+        shape = tuple(model_input.shape)
+
+        # Типичный вход изображения: (None, H, W, C)
+        if len(shape) == 4:
+            prepared_inputs.append(image_tensor)
+            continue
+
+        # Типичный вспомогательный вектор признаков: (None, N)
+        if len(shape) == 2:
+            features = int(shape[1]) if shape[1] is not None else 1
+            prepared_inputs.append(np.zeros((batch_size, features), dtype="float32"))
+            continue
+
+        # Универсальный fallback для редких форматов входа
+        fallback_shape = [batch_size]
+        for dim in shape[1:]:
+            fallback_shape.append(int(dim) if dim is not None else 1)
+        prepared_inputs.append(np.zeros(tuple(fallback_shape), dtype="float32"))
+
+    return prepared_inputs
+
+
 def predict_deepfake_probability(
     image_path: str,
     model_name: Optional[str] = None,
     threshold: float = 0.5
 ) -> dict:
     """Возвращает результат детекции дипфейка."""
-    # Определяем модель для использования
     available_models = get_available_models()
     if not available_models:
         raise ValueError("No models loaded")
 
-    selected_model = model_name or available_models[0]
+    default_model = AppConfig.DEFAULT_MODEL if AppConfig.DEFAULT_MODEL in available_models else available_models[0]
+    selected_model = model_name or default_model
+
     model = _model_manager.get_model(selected_model)
     if model is None:
         raise ValueError(f"Model '{selected_model}' not found or not loaded")
 
-    # Предобработка изображения
     img_tensor = preprocess_image(image_path)
-
-    # Выполнение предсказания
-    preds = model.predict(img_tensor, verbose=0)
-    prob = float(preds[0][0])
-    # На всякий случай ограничим диапазон
-    prob = max(0.0, min(1.0, prob))
+    model_inputs = _build_model_inputs(model, img_tensor)
+    preds = model.predict(model_inputs, verbose=0)
+    prob = _extract_probability(preds)
 
     confidence = prob if prob >= threshold else (1.0 - prob)
     label = "deepfake" if prob >= threshold else "real"
 
     return {
         "probability": prob,
+        "percent": round(prob * 100.0, 4),
         "label": label,
         "confidence": confidence,
         "model_used": selected_model,

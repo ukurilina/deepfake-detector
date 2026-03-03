@@ -441,3 +441,23 @@ MIT License - see LICENSE file for details
 
 For issues and questions:
 1. Check API health: `curl http://localhost:8000/health`
+
+---
+
+## 🐳 Docker Compose
+
+```bash
+# Build and start the API
+Docker compose up --build
+```
+
+```bash
+# Stop the API
+Docker compose down
+```
+
+Notes:
+- Models are mounted from `./models` (read-only).
+- Temporary files are written to `./temp`.
+- Configure environment via `docker-compose.yml` or a `.env` file.
+
