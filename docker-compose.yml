@@ -1,5 +1,3 @@
-оversion: "3.9"
-
 services:
   deepfake-api:
     build:
