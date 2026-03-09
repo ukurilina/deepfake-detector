@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deepfake Detector - Protect</title>
+    <link rel="stylesheet" href="./assets/css/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <div>
+          <div class="brand">Deepfake Detector</div>
+          <h1 class="page-title">Protect my file from deepfake creation</h1>
+          <p class="subtitle">This backend capability is not implemented yet, so this screen is placeholder only.</p>
+        </div>
+        <a class="nav-link" href="./index.html">Back to home</a>
+      </header>
+
+      <section class="card">
+        <div class="option disabled">
+          <div>
+            <strong>File upload and transformation</strong>
+            <div class="muted">Waiting for backend endpoint implementation.</div>
+          </div>
+          <span class="badge warning">Coming soon</span>
+        </div>
+
+        <div class="upload-panel">
+          <div class="form-row">
+            <label for="protectInput">Select file</label>
+            <input id="protectInput" type="file" disabled />
+          </div>
+          <div class="button-row">
+            <button id="protectButton" type="button" disabled>Protect file</button>
+          </div>
+          <div id="status" class="status" role="status" aria-live="polite">Feature unavailable in current backend.</div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./assets/js/protect.js"></script>
+  </body>
+</html>
+

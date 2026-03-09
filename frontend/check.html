@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deepfake Detector - Check</title>
+    <link rel="stylesheet" href="./assets/css/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <div>
+          <div class="brand">Deepfake Detector</div>
+          <h1 class="page-title">Check file authenticity</h1>
+        </div>
+        <a class="nav-link" href="./index.html">Back to home</a>
+      </header>
+
+      <section class="card">
+        <div class="option-list">
+          <div class="option">
+            <div>
+              <strong>Upload photo from computer</strong>
+              <div class="muted">Active in this MVP</div>
+            </div>
+            <span class="badge">Active</span>
+          </div>
+
+          <div class="option disabled">
+            <div>
+              <strong>Upload video from computer</strong>
+              <div class="muted">Requires backend video endpoint</div>
+            </div>
+            <span class="badge warning">Coming soon</span>
+          </div>
+
+          <div class="option disabled">
+            <div>
+              <strong>Analyze file by URL</strong>
+              <div class="muted">Requires backend URL analysis endpoint</div>
+            </div>
+            <span class="badge warning">Coming soon</span>
+          </div>
+        </div>
+
+        <div class="upload-panel">
+          <form id="detectForm" novalidate>
+            <div class="form-row">
+              <label for="fileInput">Image file</label>
+              <input id="fileInput" type="file" accept="image/*" required />
+            </div>
+
+            <div class="form-row">
+              <label for="modelSelect">Model (optional)</label>
+              <select id="modelSelect">
+                <option value="">Loading models...</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="thresholdInput">Threshold (0..1)</label>
+              <input id="thresholdInput" type="number" min="0" max="1" step="0.01" value="0.5" />
+            </div>
+
+            <div class="button-row">
+              <button id="submitButton" type="submit">Check Image</button>
+              <button id="resetButton" class="secondary" type="button">Reset</button>
+            </div>
+          </form>
+
+          <div id="status" class="status" role="status" aria-live="polite"></div>
+
+          <section id="result" class="result hidden">
+            <h3>Detection Result</h3>
+            <div class="result-grid">
+              <div class="kv"><strong>Probability</strong><span id="resultPercent">N/A</span></div>
+              <div class="kv"><strong>Verdict</strong><span id="resultVerdict">N/A</span></div>
+              <div class="kv"><strong>Label</strong><span id="resultLabel">N/A</span></div>
+              <div class="kv"><strong>Confidence</strong><span id="resultConfidence">N/A</span></div>
+              <div class="kv"><strong>Model used</strong><span id="resultModel">N/A</span></div>
+              <div class="kv"><strong>Threshold</strong><span id="resultThreshold">N/A</span></div>
+            </div>
+            <p class="muted">Raw response:</p>
+            <pre id="rawJson" class="kv"></pre>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./assets/js/check.js"></script>
+  </body>
+</html>
+

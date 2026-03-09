@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deepfake Detector - Home</title>
+    <link rel="stylesheet" href="./assets/css/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <div>
+          <div class="brand">Deepfake Detector</div>
+          <h1 class="page-title">Choose an action</h1>
+          <p class="subtitle">
+            This interface connects to the FastAPI backend and model files in <code>models/</code>.
+          </p>
+        </div>
+      </header>
+
+      <section class="grid">
+        <a class="card action-card" href="./check.html">
+          <span class="badge">MVP</span>
+          <div class="action-title">Check file authenticity</div>
+          <div class="action-text">Upload a photo and get deepfake probability from the active model.</div>
+        </a>
+
+        <a class="card action-card" href="./protect.html">
+          <span class="badge warning">Coming soon</span>
+          <div class="action-title">Protect my file from deepfake creation</div>
+          <div class="action-text">Placeholder for the future backend feature.</div>
+        </a>
+      </section>
+
+      <p class="footer-note">Copyright <span id="currentYear"></span> Deepfake Detector.</p>
+    </main>
+
+    <script type="module" src="./assets/js/main.js"></script>
+  </body>
+</html>
+
