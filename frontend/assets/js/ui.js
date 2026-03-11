@@ -36,14 +36,13 @@ export function safePercent(value) {
 
 export function buildVerdict(percent, label) {
   if (label === "deepfake") {
-    return "Likely deepfake";
+    return "Вероятно дипфейк";
   }
   if (label === "real") {
-    return "Likely real";
+    return "Вероятно оригинал";
   }
   if (percent === null) {
-    return "Unknown";
+    return "Неизвестно";
   }
-  return percent >= 50 ? "Likely deepfake" : "Likely real";
+  return percent >= 50 ? "Вероятно дипфейк" : "Вероятно оригинал";
 }
-

@@ -47,3 +47,18 @@ export async function detectImage({ file, model, threshold }) {
   return parseResponse(response);
 }
 
+export async function analyzeFileByUrl({ url, model, threshold }) {
+  const response = await fetch(`${APP_CONFIG.API_BASE_URL}/predict/url`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      url,
+      model: model || null,
+      threshold,
+    }),
+  });
+
+  return parseResponse(response);
+}
