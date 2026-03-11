@@ -5,8 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (disabledButton) {
     disabledButton.addEventListener("click", (event) => {
       event.preventDefault();
-      setStatus("This feature is not available yet.", "error");
+      setStatus("Эта функция пока недоступна.", "error");
     });
   }
 });
-

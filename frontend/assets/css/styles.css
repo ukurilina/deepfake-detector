@@ -142,6 +142,28 @@ body {
   align-items: center;
 }
 
+.option-button {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.option-button:hover {
+  border-color: var(--primary);
+}
+
+.option-button.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(79, 124, 255, 0.2) inset;
+}
+
+.option-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .option.disabled {
   opacity: 0.62;
 }
@@ -167,7 +189,8 @@ label {
 
 input[type="file"],
 select,
-input[type="number"] {
+input[type="number"],
+input[type="url"] {
   width: 100%;
   background: #0c1430;
   color: var(--text);
@@ -289,4 +312,3 @@ button:disabled,
     font-size: 24px;
   }
 }
-

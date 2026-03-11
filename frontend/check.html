@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Deepfake Detector - Check</title>
+    <title>Deepfake Detector - Проверка</title>
     <link rel="stylesheet" href="./assets/css/styles.css" />
   </head>
   <body>
@@ -11,77 +11,108 @@
       <header class="header">
         <div>
           <div class="brand">Deepfake Detector</div>
-          <h1 class="page-title">Check file authenticity</h1>
+          <h1 class="page-title">Проверка файла</h1>
         </div>
-        <a class="nav-link" href="./index.html">Back to home</a>
+        <a class="nav-link" href="./index.html">На главную</a>
       </header>
 
       <section class="card">
-        <div class="option-list">
-          <div class="option">
+        <div class="option-list" role="tablist" aria-label="Выбор способа загрузки">
+          <button id="modeImageButton" class="option option-button active" type="button" role="tab" aria-selected="true">
             <div>
-              <strong>Upload photo from computer</strong>
-              <div class="muted">Active in this MVP</div>
+              <strong>Загрузить фото с компьютера</strong>
             </div>
-            <span class="badge">Active</span>
-          </div>
+            <span class="badge">Доступно</span>
+          </button>
 
-          <div class="option disabled">
+          <button
+            id="modeVideoButton"
+            class="option option-button disabled"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-disabled="true"
+            disabled
+          >
             <div>
-              <strong>Upload video from computer</strong>
-              <div class="muted">Requires backend video endpoint</div>
+              <strong>Загрузить видео с компьютера</strong>
             </div>
-            <span class="badge warning">Coming soon</span>
-          </div>
+            <span class="badge warning">Скоро</span>
+          </button>
 
-          <div class="option disabled">
+          <button id="modeUrlButton" class="option option-button" type="button" role="tab" aria-selected="false">
             <div>
-              <strong>Analyze file by URL</strong>
-              <div class="muted">Requires backend URL analysis endpoint</div>
+              <strong>Проверить файл по URL</strong>
             </div>
-            <span class="badge warning">Coming soon</span>
-          </div>
+            <span class="badge">Доступно</span>
+          </button>
         </div>
 
         <div class="upload-panel">
-          <form id="detectForm" novalidate>
-            <div class="form-row">
-              <label for="fileInput">Image file</label>
-              <input id="fileInput" type="file" accept="image/*" required />
-            </div>
+          <section id="fileSection">
+            <form id="detectForm" novalidate>
+              <div class="form-row">
+                <label for="fileInput">Файл изображения</label>
+                <input id="fileInput" type="file" accept="image/*" required />
+              </div>
 
-            <div class="form-row">
-              <label for="modelSelect">Model (optional)</label>
-              <select id="modelSelect">
-                <option value="">Loading models...</option>
-              </select>
-            </div>
+              <div class="form-row">
+                <label for="modelSelect">Модель (необязательно)</label>
+                <select id="modelSelect">
+                  <option value="">Загрузка моделей...</option>
+                </select>
+              </div>
 
-            <div class="form-row">
-              <label for="thresholdInput">Threshold (0..1)</label>
-              <input id="thresholdInput" type="number" min="0" max="1" step="0.01" value="0.5" />
-            </div>
+              <div class="form-row">
+                <label for="thresholdInput">Порог срабатывания (%)</label>
+                <input id="thresholdInput" type="number" min="0" max="100" step="1" value="50" />
+              </div>
 
-            <div class="button-row">
-              <button id="submitButton" type="submit">Check Image</button>
-              <button id="resetButton" class="secondary" type="button">Reset</button>
-            </div>
-          </form>
+              <div class="button-row">
+                <button id="submitButton" type="submit">Проверить изображение</button>
+                <button id="resetButton" class="secondary" type="button">Сброс</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="urlSection" class="hidden">
+            <form id="urlForm" novalidate>
+              <div class="form-row">
+                <label for="urlInput">Ссылка на файл</label>
+                <input id="urlInput" type="url" placeholder="https://..." required />
+              </div>
+
+              <div class="form-row">
+                <label for="urlModelSelect">Модель (необязательно)</label>
+                <select id="urlModelSelect">
+                  <option value="">Загрузка моделей...</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label for="thresholdInputUrl">Порог срабатывания (%)</label>
+                <input id="thresholdInputUrl" type="number" min="0" max="100" step="1" value="50" />
+              </div>
+
+              <div class="button-row">
+                <button id="urlSubmitButton" type="submit">Проверить по URL</button>
+                <button id="urlResetButton" class="secondary" type="button">Сброс</button>
+              </div>
+            </form>
+          </section>
 
           <div id="status" class="status" role="status" aria-live="polite"></div>
 
           <section id="result" class="result hidden">
-            <h3>Detection Result</h3>
+            <h3>Результат проверки</h3>
             <div class="result-grid">
-              <div class="kv"><strong>Probability</strong><span id="resultPercent">N/A</span></div>
-              <div class="kv"><strong>Verdict</strong><span id="resultVerdict">N/A</span></div>
-              <div class="kv"><strong>Label</strong><span id="resultLabel">N/A</span></div>
-              <div class="kv"><strong>Confidence</strong><span id="resultConfidence">N/A</span></div>
-              <div class="kv"><strong>Model used</strong><span id="resultModel">N/A</span></div>
-              <div class="kv"><strong>Threshold</strong><span id="resultThreshold">N/A</span></div>
+              <div class="kv"><strong>Вероятность</strong><span id="resultPercent">Н/Д</span></div>
+              <div class="kv"><strong>Вердикт</strong><span id="resultVerdict">Н/Д</span></div>
+              <div class="kv"><strong>Метка</strong><span id="resultLabel">Н/Д</span></div>
+              <div class="kv"><strong>Уверенность</strong><span id="resultConfidence">Н/Д</span></div>
+              <div class="kv"><strong>Используемая модель</strong><span id="resultModel">Н/Д</span></div>
+              <div class="kv"><strong>Порог срабатывания</strong><span id="resultThreshold">Н/Д</span></div>
             </div>
-            <p class="muted">Raw response:</p>
-            <pre id="rawJson" class="kv"></pre>
           </section>
         </div>
       </section>

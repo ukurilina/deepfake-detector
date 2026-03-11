@@ -3,6 +3,5 @@ export const APP_CONFIG = {
   MAX_FILE_SIZE_MB: 20,
   SUPPORTED_EXTENSIONS: [".jpg", ".jpeg", ".png", ".bmp", ".webp"],
   SUPPORTED_MIME_PREFIX: "image/",
-  DEFAULT_THRESHOLD: 0.5,
+  DEFAULT_THRESHOLD: 50,
 };
-
