@@ -1,9 +1,55 @@
 from typing import Dict, Optional, List
 import os
+import json
+import zipfile
+import tempfile
 import tensorflow as tf
+import keras
 
 from app.config import AppConfig
 from app.audio_custom_objects import get_audio_custom_objects
+
+
+def _sanitize_keras_config_node(node):
+    if isinstance(node, dict):
+        module = node.get("module")
+        config = node.get("config")
+
+        if isinstance(config, dict):
+            if "quantization_config" in config:
+                config.pop("quantization_config", None)
+
+            if isinstance(module, str) and module.startswith("keras.src.ops"):
+                # Older runtime op classes often reject serialized `name` in ctor.
+                config.pop("name", None)
+
+        for value in node.values():
+            _sanitize_keras_config_node(value)
+        return
+
+    if isinstance(node, list):
+        for item in node:
+            _sanitize_keras_config_node(item)
+
+
+def _build_sanitized_keras_archive(model_path: str) -> str:
+    with zipfile.ZipFile(model_path, "r") as src_zip:
+        config_raw = src_zip.read("config.json")
+        config_obj = json.loads(config_raw.decode("utf-8"))
+        _sanitize_keras_config_node(config_obj)
+        new_config_raw = json.dumps(config_obj, ensure_ascii=True).encode("utf-8")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".keras") as tmp_file:
+            sanitized_path = tmp_file.name
+
+        with zipfile.ZipFile(sanitized_path, "w") as dst_zip:
+            for info in src_zip.infolist():
+                if info.filename == "config.json":
+                    dst_zip.writestr("config.json", new_config_raw)
+                else:
+                    dst_zip.writestr(info, src_zip.read(info.filename))
+
+    return sanitized_path
 
 
 class ModelManager:
@@ -43,24 +89,26 @@ class ModelManager:
             return False
 
         errors = []
-        audio_custom_objects = get_audio_custom_objects() if content_type == "audio" else None
+        audio_custom_objects = get_audio_custom_objects(include_ops=True) if content_type == "audio" else None
 
         if audio_custom_objects:
             load_attempts = (
-                {"compile": False, "custom_objects": audio_custom_objects, "safe_mode": False},
-                {"compile": False, "custom_objects": audio_custom_objects},
-                {"custom_objects": audio_custom_objects, "safe_mode": False},
-                {"custom_objects": audio_custom_objects},
+                (keras.models.load_model, {"compile": False, "custom_objects": audio_custom_objects, "safe_mode": False}),
+                (keras.models.load_model, {"compile": False, "custom_objects": audio_custom_objects}),
+                (tf.keras.models.load_model, {"compile": False, "custom_objects": audio_custom_objects, "safe_mode": False}),
+                (tf.keras.models.load_model, {"compile": False, "custom_objects": audio_custom_objects}),
+                (keras.models.load_model, {"custom_objects": audio_custom_objects, "safe_mode": False}),
+                (tf.keras.models.load_model, {"custom_objects": audio_custom_objects, "safe_mode": False}),
             )
         else:
             load_attempts = (
-                {"compile": False},
-                {},
+                (tf.keras.models.load_model, {"compile": False}),
+                (tf.keras.models.load_model, {}),
             )
 
-        for kwargs in load_attempts:
+        for loader, kwargs in load_attempts:
             try:
-                model = tf.keras.models.load_model(model_path, **kwargs)
+                model = loader(model_path, **kwargs)
                 self._models[model_name] = model
                 self._model_configs[model_name] = {
                     "path": model_path,
@@ -70,9 +118,41 @@ class ModelManager:
                 }
                 return True
             except Exception as exc:
-                print(exc)
-                mode = "compile=False" if kwargs else "default"
+                mode = f"{loader.__module__}.{loader.__name__}({kwargs if kwargs else 'default'})"
                 errors.append(f"{mode}: {exc}")
+
+        if audio_custom_objects:
+            sanitized_path = None
+            try:
+                sanitized_path = _build_sanitized_keras_archive(model_path)
+                sanitized_custom_objects = get_audio_custom_objects(include_ops=False)
+                sanitized_attempts = (
+                    (keras.models.load_model, {"compile": False, "custom_objects": sanitized_custom_objects, "safe_mode": False}),
+                    (keras.models.load_model, {"compile": False, "custom_objects": sanitized_custom_objects}),
+                    (tf.keras.models.load_model, {"compile": False, "custom_objects": sanitized_custom_objects, "safe_mode": False}),
+                    (tf.keras.models.load_model, {"compile": False, "custom_objects": sanitized_custom_objects}),
+                )
+
+                for loader, kwargs in sanitized_attempts:
+                    try:
+                        model = loader(sanitized_path, **kwargs)
+                        self._models[model_name] = model
+                        self._model_configs[model_name] = {
+                            "path": model_path,
+                            "content_type": content_type,
+                            "loaded": True,
+                            "error": None,
+                        }
+                        return True
+                    except Exception as exc:
+                        mode = f"sanitized:{loader.__module__}.{loader.__name__}({kwargs if kwargs else 'default'})"
+                        errors.append(f"{mode}: {exc}")
+            finally:
+                if sanitized_path and os.path.exists(sanitized_path):
+                    try:
+                        os.unlink(sanitized_path)
+                    except OSError:
+                        pass
 
         self._model_configs[model_name] = {
             "path": model_path,

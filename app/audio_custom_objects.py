@@ -65,11 +65,129 @@ class MaskedMean(layers.Layer):
         return num / den
 
 
-def get_audio_custom_objects():
-    return {
+class ExpandDims(layers.Layer):
+    """Compat layer for models serialized with keras.ops.expand_dims nodes."""
+
+    def __init__(self, axis=-1, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.axis = axis
+
+    def call(self, x):
+        return tf.expand_dims(x, axis=self.axis)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"axis": self.axis})
+        return config
+
+
+class Mean(layers.Layer):
+    def __init__(self, axis=None, keepdims=False, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.axis = axis
+        self.keepdims = keepdims
+
+    def call(self, x):
+        return tf.reduce_mean(x, axis=self.axis, keepdims=self.keepdims)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"axis": self.axis, "keepdims": self.keepdims})
+        return config
+
+
+class Sum(layers.Layer):
+    def __init__(self, axis=None, keepdims=False, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.axis = axis
+        self.keepdims = keepdims
+
+    def call(self, x):
+        return tf.reduce_sum(x, axis=self.axis, keepdims=self.keepdims)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"axis": self.axis, "keepdims": self.keepdims})
+        return config
+
+
+class Log(layers.Layer):
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+
+    def call(self, x):
+        return tf.math.log(x)
+
+
+class Add(layers.Layer):
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+
+    def call(self, inputs):
+        if isinstance(inputs, (list, tuple)) and len(inputs) == 2:
+            return tf.add(inputs[0], inputs[1])
+        return tf.add_n(inputs)
+
+
+class Multiply(layers.Layer):
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+
+    def call(self, inputs):
+        if isinstance(inputs, (list, tuple)) and len(inputs) == 2:
+            return tf.multiply(inputs[0], inputs[1])
+        result = inputs[0]
+        for item in inputs[1:]:
+            result = tf.multiply(result, item)
+        return result
+
+
+class Softmax(layers.Layer):
+    def __init__(self, axis=-1, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.axis = axis
+
+    def call(self, x):
+        return tf.nn.softmax(x, axis=self.axis)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"axis": self.axis})
+        return config
+
+
+class Dense(layers.Dense):
+    def __init__(self, *args, quantization_config=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._compat_quantization_config = quantization_config
+
+    def get_config(self):
+        config = super().get_config()
+        config["quantization_config"] = self._compat_quantization_config
+        return config
+
+
+def get_audio_custom_objects(include_ops=True):
+    objects = {
         "flatten_segments": flatten_segments,
         "restore_segments": restore_segments,
         "MRSTFT": MRSTFT,
         "MaskedMean": MaskedMean,
+        "Dense": Dense,
     }
+
+    if include_ops:
+        objects.update(
+            {
+                "ExpandDims": ExpandDims,
+                "Mean": Mean,
+                "Sum": Sum,
+                "Log": Log,
+                "Add": Add,
+                "Multiply": Multiply,
+                "Softmax": Softmax,
+            }
+        )
+
+    return objects
 
