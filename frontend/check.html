@@ -25,21 +25,6 @@
             <span class="badge">Доступно</span>
           </button>
 
-          <button
-            id="modeAudioButton"
-            class="option option-button disabled"
-            type="button"
-            role="tab"
-            aria-selected="false"
-            aria-disabled="true"
-            disabled
-          >
-            <span>
-              <strong>Загрузить аудио с компьютера</strong>
-            </span>
-            <span class="badge warning">Скоро</span>
-          </button>
-
           <button id="modeUrlButton" class="option option-button" type="button" role="tab" aria-selected="false">
             <span>
               <strong>Проверить файл по URL</strong>
@@ -56,7 +41,7 @@
                 <select id="fileContentTypeSelect" required>
                   <option value="photo" selected>Фото</option>
                   <option value="video">Видео</option>
-                  <option value="audio" disabled>Аудио (скоро)</option>
+                  <option value="audio">Аудио</option>
                 </select>
               </div>
 
@@ -96,7 +81,7 @@
                 <select id="urlContentTypeSelect" required>
                   <option value="photo" selected>Фото</option>
                   <option value="video">Видео</option>
-                  <option value="audio" disabled>Аудио (скоро)</option>
+                  <option value="audio">Аудио</option>
                 </select>
               </div>
 
@@ -127,7 +112,6 @@
               <div class="kv"><strong>Вероятность</strong><span id="resultPercent">Н/Д</span></div>
               <div class="kv"><strong>Вердикт</strong><span id="resultVerdict">Н/Д</span></div>
               <div class="kv"><strong>Метка</strong><span id="resultLabel">Н/Д</span></div>
-              <div class="kv"><strong>Уверенность</strong><span id="resultConfidence">Н/Д</span></div>
               <div class="kv"><strong>Используемая модель</strong><span id="resultModel">Н/Д</span></div>
               <div class="kv"><strong>Порог срабатывания</strong><span id="resultThreshold">Н/Д</span></div>
             </div>

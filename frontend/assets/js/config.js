@@ -19,11 +19,6 @@ function resolveApiBaseUrl() {
 export const APP_CONFIG = {
   API_BASE_URL: resolveApiBaseUrl(),
   MAX_FILE_SIZE_MB: 20,
-  DEFAULT_THRESHOLD_BY_CONTENT: {
-    photo: 65.15938,
-    video: 52.268463,
-    audio: 66.81531,
-  },
   SUPPORTED_MEDIA: {
     photo: {
       extensions: [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif"],

@@ -51,12 +51,8 @@ function getMediaConfig(contentType) {
 }
 
 function getDefaultThresholdPercent(contentType) {
-  const value = APP_CONFIG.DEFAULT_THRESHOLD_BY_CONTENT?.[contentType];
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return APP_CONFIG.DEFAULT_THRESHOLD;
-  }
-  return numeric;
+  void contentType;
+  return APP_CONFIG.DEFAULT_THRESHOLD;
 }
 
 function setThresholdDefault(input, contentType) {
@@ -121,7 +117,6 @@ function normalizeResult(payload) {
   return {
     percent,
     label: payload?.label || "",
-    confidencePercent: safePercent(Number(payload?.confidence) * 100),
     modelUsed: payload?.model_used || "Н/Д",
     thresholdPercent: safePercent(Number(payload?.threshold) * 100),
     heatmap: validateHeatmap2D(payload?.heatmap) ? payload.heatmap : null,
@@ -247,10 +242,6 @@ async function renderResult(result) {
   setText("resultPercent", result.percent === null ? "Н/Д" : `${result.percent.toFixed(2)}%`);
   setText("resultVerdict", buildVerdict(result.percent, result.label));
   setText("resultLabel", result.label || "Н/Д");
-  setText(
-    "resultConfidence",
-    Number.isFinite(result.confidencePercent) ? `${result.confidencePercent.toFixed(2)}%` : "Н/Д"
-  );
   setText("resultModel", result.modelUsed);
   setText(
     "resultThreshold",
@@ -341,7 +332,13 @@ function syncFileUiByContentType(contentType, refs) {
   const mediaConfig = getMediaConfig(contentType);
   const isComingSoon = Boolean(mediaConfig.comingSoon);
 
-  refs.fileInputLabel.textContent = contentType === "video" ? "Видеофайл" : "Файл изображения";
+  if (contentType === "video") {
+    refs.fileInputLabel.textContent = "Видеофайл";
+  } else if (contentType === "audio") {
+    refs.fileInputLabel.textContent = "Аудиофайл";
+  } else {
+    refs.fileInputLabel.textContent = "Файл изображения";
+  }
   refs.fileInput.setAttribute("accept", mediaConfig.inputAccept);
   refs.submitButton.textContent = mediaConfig.submitText;
   refs.submitButton.disabled = isComingSoon;
@@ -386,6 +383,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const urlContentTypeSelect = document.getElementById("urlContentTypeSelect");
 
   const modeFileButton = document.getElementById("modeFileButton");
+  const modeAudioButton = document.getElementById("modeAudioButton");
   const modeUrlButton = document.getElementById("modeUrlButton");
 
   const urlForm = document.getElementById("urlForm");
@@ -413,6 +411,14 @@ document.addEventListener("DOMContentLoaded", () => {
   setMode("file");
 
   modeFileButton?.addEventListener("click", () => setMode("file"));
+  modeAudioButton?.addEventListener("click", async () => {
+    setMode("file");
+    if (fileContentTypeSelect) {
+      fileContentTypeSelect.value = "audio";
+      syncFileUiByContentType("audio", refs);
+      await populateModelSelect(modelSelect, "audio");
+    }
+  });
   modeUrlButton?.addEventListener("click", () => setMode("url"));
 
   heatmapRange?.addEventListener("input", () => {
@@ -473,7 +479,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     submitButton.disabled = true;
     submitButton.textContent = "Анализ...";
-    setStatus(contentType === "video" ? "Отправка видео в модель..." : "Отправка изображения в модель...");
+    if (contentType === "video") {
+      setStatus("Отправка видео в модель...");
+    } else if (contentType === "audio") {
+      setStatus("Отправка аудио в модель...");
+    } else {
+      setStatus("Отправка изображения в модель...");
+    }
     setSourceImageFromFile(file, contentType);
 
     await runDetection(() =>

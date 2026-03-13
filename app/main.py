@@ -105,7 +105,7 @@ def _ensure_extension_matches_content_type(content_type: str, extension: str) ->
 
 def _resolve_threshold(content_type: str, threshold: Optional[float]) -> float:
     if threshold is None:
-        return float(AppConfig.DEFAULT_THRESHOLD_BY_CONTENT.get(content_type, 0.5))
+        return 0.5
     return float(threshold)
 
     if content_type == "video" and extension not in SUPPORTED_VIDEO_EXTENSIONS:

@@ -34,7 +34,7 @@ DEFAULT_MODEL_BY_CONTENT = {
     "audio": "model_audio",
 }
 
-DEFAULT_THRESHOLD_BY_CONTENT = {
+CALIBRATION_PIVOT_BY_CONTENT = {
     "photo": 0.6515938,
     "video": 0.52268463,
     "audio": 0.6681531,
@@ -63,6 +63,8 @@ CORS_ALLOW_HEADERS = ["*"]
 # Rate Limiting
 ENABLE_RATE_LIMITING = os.getenv("ENABLE_RATE_LIMITING", "false").lower() == "true"
 REQUESTS_PER_MINUTE = int(os.getenv("REQUESTS_PER_MINUTE", 100))
+ENABLE_FACE_ALIGN_FOR_VIDEO = os.getenv("ENABLE_FACE_ALIGN_FOR_VIDEO", "true").lower() == "true"
+REUSE_LAST_VIDEO_FACE_TRANSFORM = os.getenv("REUSE_LAST_VIDEO_FACE_TRANSFORM", "true").lower() == "true"
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -99,12 +101,14 @@ class AppConfig:
     MODEL_REGISTRY = MODEL_REGISTRY
     CONTENT_TYPES = CONTENT_TYPES
     DEFAULT_MODEL_BY_CONTENT = DEFAULT_MODEL_BY_CONTENT
-    DEFAULT_THRESHOLD_BY_CONTENT = DEFAULT_THRESHOLD_BY_CONTENT
+    CALIBRATION_PIVOT_BY_CONTENT = CALIBRATION_PIVOT_BY_CONTENT
     ALLOWED_MODEL_FILES = ALLOWED_MODEL_FILES
     USE_GPU = USE_GPU
 
     # Feature flags
     ENABLE_VIDEO_SUPPORT = os.getenv("ENABLE_VIDEO_SUPPORT", "false").lower() == "true"
+    ENABLE_FACE_ALIGN_FOR_VIDEO = ENABLE_FACE_ALIGN_FOR_VIDEO
+    REUSE_LAST_VIDEO_FACE_TRANSFORM = REUSE_LAST_VIDEO_FACE_TRANSFORM
     ENABLE_CACHING = ENABLE_CACHING
     ENABLE_RATE_LIMITING = ENABLE_RATE_LIMITING
 
@@ -126,12 +130,14 @@ class AppConfig:
             "max_file_size": cls.MAX_FILE_SIZE,
             "content_types": list(CONTENT_TYPES),
             "default_model_by_content": DEFAULT_MODEL_BY_CONTENT,
-            "default_threshold_by_content": DEFAULT_THRESHOLD_BY_CONTENT,
+            "calibration_pivot_by_content": CALIBRATION_PIVOT_BY_CONTENT,
             "supported_image_types": list(SUPPORTED_IMAGE_EXTENSIONS),
             "supported_video_types": list(SUPPORTED_VIDEO_EXTENSIONS),
             "supported_audio_types": list(SUPPORTED_AUDIO_EXTENSIONS),
             "gpu_enabled": cls.USE_GPU,
             "caching_enabled": cls.ENABLE_CACHING,
             "video_support": cls.ENABLE_VIDEO_SUPPORT,
+            "face_align_for_video": cls.ENABLE_FACE_ALIGN_FOR_VIDEO,
+            "reuse_last_video_face_transform": cls.REUSE_LAST_VIDEO_FACE_TRANSFORM,
             "temp_cleanup_on_startup": cls.TEMP_CLEANUP_ON_STARTUP,
         }

@@ -157,6 +157,34 @@ export function findSuspiciousRegions(heatmap) {
   ];
 
   const indexOf = (x, y) => y * width + x;
+  const maxRegionW = Math.max(24, Math.floor(width * 0.26));
+  const maxRegionH = Math.max(24, Math.floor(height * 0.26));
+  const maxRegionArea = Math.max(220, Math.floor(width * height * 0.09));
+
+  function compactRegion(region) {
+    const centerX = region.x + Math.floor(region.width / 2);
+    const centerY = region.y + Math.floor(region.height / 2);
+    let targetW = Math.min(region.width, maxRegionW);
+    let targetH = Math.min(region.height, maxRegionH);
+
+    const area = targetW * targetH;
+    if (area > maxRegionArea) {
+      const ratio = Math.sqrt(maxRegionArea / area);
+      targetW = Math.max(10, Math.floor(targetW * ratio));
+      targetH = Math.max(10, Math.floor(targetH * ratio));
+    }
+
+    const x = Math.max(0, Math.min(width - targetW, centerX - Math.floor(targetW / 2)));
+    const y = Math.max(0, Math.min(height - targetH, centerY - Math.floor(targetH / 2)));
+
+    return {
+      ...region,
+      x,
+      y,
+      width: targetW,
+      height: targetH,
+    };
+  }
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -226,7 +254,7 @@ export function findSuspiciousRegions(heatmap) {
 
   regions.sort((a, b) => b.score - a.score);
   if (regions.length) {
-    return regions.slice(0, 5);
+    return regions.slice(0, 5).map(compactRegion);
   }
 
   // Fallback: берём небольшие окна вокруг самых горячих точек, если связные области не найдены.
@@ -272,7 +300,7 @@ export function findSuspiciousRegions(heatmap) {
     }
   }
 
-  return fallbackRegions;
+  return fallbackRegions.map(compactRegion);
 }
 
 export async function drawImageRegions(canvasId, imageUrl, regions, heatmapWidth, heatmapHeight) {
