@@ -18,13 +18,41 @@ async function parseResponse(response) {
   return payload;
 }
 
+async function fetchJson(endpoint, options = {}) {
+  try {
+    const response = await fetch(endpoint, options);
+    return await parseResponse(response);
+  } catch (error) {
+    const message = String(error?.message || "");
+    if (message.toLowerCase().includes("failed to fetch")) {
+      throw new Error(
+        `Нет соединения с backend (${APP_CONFIG.API_BASE_URL}). Проверьте, что API запущен и доступен.`
+      );
+    }
+    throw error;
+  }
+}
+
 export async function fetchModels() {
-  const response = await fetch(`${APP_CONFIG.API_BASE_URL}/models`);
-  const payload = await parseResponse(response);
+  const payload = await fetchJson(`${APP_CONFIG.API_BASE_URL}/models`);
   return Array.isArray(payload.models) ? payload.models : [];
 }
 
-export async function detectImage({ file, model, threshold }) {
+export async function fetchModelsByContentType(contentType) {
+  const params = new URLSearchParams();
+  if (contentType) {
+    params.set("content_type", contentType);
+  }
+  const query = params.toString();
+  const endpoint = `${APP_CONFIG.API_BASE_URL}/models${query ? `?${query}` : ""}`;
+  const payload = await fetchJson(endpoint);
+  return {
+    models: Array.isArray(payload.models) ? payload.models : [],
+    defaultModel: payload.default_model || "",
+  };
+}
+
+export async function detectFile({ file, model, threshold, contentType }) {
   const formData = new FormData();
   formData.append("file", file);
 
@@ -35,30 +63,30 @@ export async function detectImage({ file, model, threshold }) {
   if (typeof threshold === "number") {
     params.set("threshold", String(threshold));
   }
+  if (contentType) {
+    params.set("content_type", contentType);
+  }
 
   const query = params.toString();
   const endpoint = `${APP_CONFIG.API_BASE_URL}/detect${query ? `?${query}` : ""}`;
 
-  const response = await fetch(endpoint, {
+  return fetchJson(endpoint, {
     method: "POST",
     body: formData,
   });
-
-  return parseResponse(response);
 }
 
-export async function analyzeFileByUrl({ url, model, threshold }) {
-  const response = await fetch(`${APP_CONFIG.API_BASE_URL}/predict/url`, {
+export async function analyzeFileByUrl({ url, model, threshold, contentType }) {
+  return fetchJson(`${APP_CONFIG.API_BASE_URL}/predict/url`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       url,
+      content_type: contentType,
       model: model || null,
       threshold,
     }),
   });
-
-  return parseResponse(response);
 }

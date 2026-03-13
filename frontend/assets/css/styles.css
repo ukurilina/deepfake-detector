@@ -263,6 +263,46 @@ button:disabled,
   margin: 0 0 10px;
 }
 
+.heatmap-panel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.heatmap-panel h4 {
+  margin: 0 0 8px;
+}
+
+.regions-panel {
+  margin-bottom: 12px;
+}
+
+.regions-panel h4 {
+  margin: 0 0 8px;
+}
+
+.heatmap-canvas {
+  display: block;
+  width: min(100%, 420px);
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #0a122b;
+  image-rendering: pixelated;
+}
+
+.heatmap-controls {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.heatmap-controls input[type="range"] {
+  width: 100%;
+}
+
 .result-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -310,5 +350,9 @@ button:disabled,
 
   .page-title {
     font-size: 24px;
+  }
+
+  .heatmap-controls {
+    grid-template-columns: 1fr;
   }
 }

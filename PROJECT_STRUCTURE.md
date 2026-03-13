@@ -17,8 +17,8 @@ deepfake_detector/
 │   ├── models_manager.py
 │   └── video_utils.py
 ├── models/
-│   ├── best_model3 (3)_acc.keras
-│   └── best_model3 (4)_loss.keras
+│   ├── model_photo.keras
+│   └── model_video.keras
 └── temp/
 ```
 
@@ -36,4 +36,4 @@ deepfake_detector/
 
 # Для просмотра этой структуры:
 # python -c "import this; exec(open(__file__).read())"
-
+"""

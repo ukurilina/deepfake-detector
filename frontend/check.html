@@ -18,15 +18,15 @@
 
       <section class="card">
         <div class="option-list" role="tablist" aria-label="Выбор способа загрузки">
-          <button id="modeImageButton" class="option option-button active" type="button" role="tab" aria-selected="true">
-            <div>
-              <strong>Загрузить фото с компьютера</strong>
-            </div>
+          <button id="modeFileButton" class="option option-button active" type="button" role="tab" aria-selected="true">
+            <span>
+              <strong>Загрузить файл с компьютера</strong>
+            </span>
             <span class="badge">Доступно</span>
           </button>
 
           <button
-            id="modeVideoButton"
+            id="modeAudioButton"
             class="option option-button disabled"
             type="button"
             role="tab"
@@ -34,16 +34,16 @@
             aria-disabled="true"
             disabled
           >
-            <div>
-              <strong>Загрузить видео с компьютера</strong>
-            </div>
+            <span>
+              <strong>Загрузить аудио с компьютера</strong>
+            </span>
             <span class="badge warning">Скоро</span>
           </button>
 
           <button id="modeUrlButton" class="option option-button" type="button" role="tab" aria-selected="false">
-            <div>
+            <span>
               <strong>Проверить файл по URL</strong>
-            </div>
+            </span>
             <span class="badge">Доступно</span>
           </button>
         </div>
@@ -52,7 +52,16 @@
           <section id="fileSection">
             <form id="detectForm" novalidate>
               <div class="form-row">
-                <label for="fileInput">Файл изображения</label>
+                <label for="fileContentTypeSelect">Тип контента</label>
+                <select id="fileContentTypeSelect" required>
+                  <option value="photo" selected>Фото</option>
+                  <option value="video">Видео</option>
+                  <option value="audio" disabled>Аудио (скоро)</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label for="fileInput" id="fileInputLabel">Файл изображения</label>
                 <input id="fileInput" type="file" accept="image/*" required />
               </div>
 
@@ -80,6 +89,15 @@
               <div class="form-row">
                 <label for="urlInput">Ссылка на файл</label>
                 <input id="urlInput" type="url" placeholder="https://..." required />
+              </div>
+
+              <div class="form-row">
+                <label for="urlContentTypeSelect">Тип контента</label>
+                <select id="urlContentTypeSelect" required>
+                  <option value="photo" selected>Фото</option>
+                  <option value="video">Видео</option>
+                  <option value="audio" disabled>Аудио (скоро)</option>
+                </select>
               </div>
 
               <div class="form-row">
@@ -113,6 +131,28 @@
               <div class="kv"><strong>Используемая модель</strong><span id="resultModel">Н/Д</span></div>
               <div class="kv"><strong>Порог срабатывания</strong><span id="resultThreshold">Н/Д</span></div>
             </div>
+
+            <section id="heatmapSection" class="heatmap-panel hidden" aria-live="polite">
+              <h4>Карта внимания</h4>
+
+              <div id="regionsSection" class="regions-panel hidden">
+                <h4>Спорные области на исходном изображении</h4>
+                <canvas id="regionsCanvas" class="heatmap-canvas" width="256" height="256"></canvas>
+                <div id="regionsMeta" class="muted"></div>
+              </div>
+
+              <canvas id="heatmapCanvas" class="heatmap-canvas" width="256" height="256"></canvas>
+              <div id="heatmapMeta" class="muted"></div>
+
+              <div id="videoHeatmapControls" class="heatmap-controls hidden">
+                <button id="heatmapPrevFrame" class="secondary" type="button">Предыдущий кадр</button>
+                <label for="heatmapFrameRange" class="muted">Кадр</label>
+                <input id="heatmapFrameRange" type="range" min="0" max="0" step="1" value="0" />
+                <button id="heatmapNextFrame" class="secondary" type="button">Следующий кадр</button>
+              </div>
+
+              <div id="heatmapFrameIndicator" class="muted"></div>
+            </section>
           </section>
         </div>
       </section>

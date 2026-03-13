@@ -3,6 +3,7 @@ import os
 import tensorflow as tf
 
 from app.config import AppConfig
+from app.audio_custom_objects import get_audio_custom_objects
 
 
 class ModelManager:
@@ -21,7 +22,7 @@ class ModelManager:
         """Инициализация менеджера моделей."""
         self.models_dir = AppConfig.MODELS_DIR
 
-    def load_model(self, model_name: str, model_path: str) -> bool:
+    def load_model(self, model_name: str, model_path: str, content_type: str) -> bool:
         """
         Загружает модель в память.
 
@@ -32,26 +33,58 @@ class ModelManager:
         Returns:
             True если успешно загружена, False иначе
         """
-        try:
-            if not os.path.exists(model_path):
-                self._model_configs[model_name] = {"path": model_path, "loaded": False}
-                return False
-
-            model = tf.keras.models.load_model(model_path)
-            self._models[model_name] = model
+        if not os.path.exists(model_path):
             self._model_configs[model_name] = {
                 "path": model_path,
-                "loaded": True
+                "content_type": content_type,
+                "loaded": False,
+                "error": "Model file not found",
             }
-            return True
-
-        except Exception:
-            self._model_configs[model_name] = {"path": model_path, "loaded": False}
             return False
+
+        errors = []
+        audio_custom_objects = get_audio_custom_objects() if content_type == "audio" else None
+
+        if audio_custom_objects:
+            load_attempts = (
+                {"compile": False, "custom_objects": audio_custom_objects, "safe_mode": False},
+                {"compile": False, "custom_objects": audio_custom_objects},
+                {"custom_objects": audio_custom_objects, "safe_mode": False},
+                {"custom_objects": audio_custom_objects},
+            )
+        else:
+            load_attempts = (
+                {"compile": False},
+                {},
+            )
+
+        for kwargs in load_attempts:
+            try:
+                model = tf.keras.models.load_model(model_path, **kwargs)
+                self._models[model_name] = model
+                self._model_configs[model_name] = {
+                    "path": model_path,
+                    "content_type": content_type,
+                    "loaded": True,
+                    "error": None,
+                }
+                return True
+            except Exception as exc:
+                print(exc)
+                mode = "compile=False" if kwargs else "default"
+                errors.append(f"{mode}: {exc}")
+
+        self._model_configs[model_name] = {
+            "path": model_path,
+            "content_type": content_type,
+            "loaded": False,
+            "error": " | ".join(errors),
+        }
+        return False
 
     def load_all_models_from_directory(self) -> Dict[str, bool]:
         """
-        Загружает все .keras модели из директории models/.
+        Загружает только поддерживаемые .keras модели из директории models/.
 
         Returns:
             Dict с результатами загрузки каждой модели
@@ -63,12 +96,11 @@ class ModelManager:
         if not os.path.exists(self.models_dir):
             return results
 
-        for filename in sorted(os.listdir(self.models_dir)):
-            if not filename.lower().endswith(".keras"):
-                continue
-            model_name = filename[:-6]
-            model_path = os.path.join(self.models_dir, filename)
-            results[model_name] = self.load_model(model_name, model_path)
+        for model_name, spec in AppConfig.MODEL_REGISTRY.items():
+            model_filename = str(spec["file_name"])
+            model_path = os.path.join(self.models_dir, model_filename)
+            content_type = str(spec["content_type"])
+            results[model_name] = self.load_model(model_name, model_path, content_type)
 
         return results
 
@@ -86,7 +118,9 @@ class ModelManager:
             {
                 "name": name,
                 "path": config["path"],
-                "status": "loaded" if config["loaded"] else "error"
+                "content_type": config.get("content_type"),
+                "status": "loaded" if config["loaded"] else "error",
+                "error": config.get("error"),
             }
             for name, config in self._model_configs.items()
         ]

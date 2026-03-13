@@ -24,13 +24,14 @@ AI-powered deepfake detection system built with FastAPI and TensorFlow.
 
 - **Multi-model Support**: Load and use multiple deepfake detection models simultaneously
 - **RESTful API**: Easy-to-use FastAPI endpoints with automatic documentation
-- **Image Processing**: Automatic image preprocessing and validation
+- **Media Processing**: Automatic preprocessing for photos and videos
 - **Error Handling**: Comprehensive error handling and validation
 - **Health Checks**: Built-in health check endpoints for monitoring
 - **Logging**: Detailed logging for debugging and monitoring
 - **Deployable**: Can be containerized if needed (not included here)
 - **Configurable**: Flexible configuration through environment variables
-- **Extensible**: Ready for video support and additional features
+- **Content-Type Routing**: Models are mapped to `photo`/`video`/`audio` types
+- **Audio Placeholder**: Audio flow is exposed in API/UI as `coming soon`
 
 ---
 
@@ -46,8 +47,8 @@ deepfake_detector/
 │   ├── models_manager.py    # Model loading and management
 │   └── video_utils.py       # Video processing utilities
 ├── models/
-│   ├── best_model3 (3)_acc.keras
-│   └── best_model3 (4)_loss.keras
+│   ├── model_photo.keras
+│   └── model_video.keras
 ├── temp/                    # Temporary files
 ├── requirements.txt         # Python dependencies
 └── README.md              # This file
@@ -117,8 +118,8 @@ GET /health
   "status": "healthy",
   "models_loaded": 2,
   "available_models": [
-    "best_model3 (3)_acc",
-    "best_model3 (4)_loss"
+    "model_photo",
+    "model_video"
   ],
   "version": "1.0.0",
   "gpu_enabled": false
@@ -128,17 +129,21 @@ GET /health
 #### 2. List Models
 ```http
 GET /models
+GET /models?content_type=photo
 ```
 
 **Response:**
 ```json
 {
-  "models": [
-    "best_model3 (3)_acc",
-    "best_model3 (4)_loss"
-  ],
-  "count": 2,
-  "default_model": "best_model3 (3)_acc"
+  "models": ["model_photo"],
+  "count": 1,
+  "default_model": "model_photo",
+  "content_type": "photo",
+  "models_by_content": {
+    "photo": ["model_photo"],
+    "video": ["model_video"],
+    "audio": []
+  }
 }
 ```
 
@@ -148,8 +153,9 @@ POST /detect
 Content-Type: multipart/form-data
 
 Parameters:
-- file: Image file (required)
-- model: Model name (optional, defaults to first loaded)
+- file: Media file (photo/video)
+- content_type: photo|video|audio (optional, inferred when possible)
+- model: Model name (optional, filtered by content type)
 - threshold: Classification threshold 0.0-1.0 (optional, default: 0.5)
 ```
 
@@ -160,7 +166,7 @@ Parameters:
   "label": "deepfake",
   "confidence": 0.8523,
   "percent": 85.23,
-  "model_used": "best_model3 (3)_acc",
+  "model_used": "model_photo",
   "threshold": 0.5
 }
 ```
@@ -168,11 +174,31 @@ Parameters:
 **Status Codes:**
 - `200` - Success
 - `400` - Invalid file type or request
+- `415` - Uploaded/downloaded media does not match selected type
 - `413` - File too large
 - `503` - No models available
 - `500` - Server error
 
-#### 4. Application Info
+#### 4. Detect by URL
+```http
+POST /predict/url
+Content-Type: application/json
+```
+
+**Request body:**
+```json
+{
+  "url": "https://example.com/file.mp4",
+  "content_type": "video",
+  "model": "model_video",
+  "threshold": 0.5
+}
+```
+
+`content_type` is required and must be one of `photo`, `video`, `audio`.
+For `audio`, API currently returns `501` (`coming soon`).
+
+#### 5. Application Info
 ```http
 GET /info
 ```
@@ -188,7 +214,7 @@ GET /info
 }
 ```
 
-#### 5. Root Endpoint
+#### 6. Root Endpoint
 ```http
 GET /
 ```
@@ -228,8 +254,8 @@ source venv/bin/activate  # or venv\Scripts\activate on Windows
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. (Optional) Install video support
-pip install opencv-python
+# 3. Video support dependency is included in requirements
+# (opencv-python-headless)
 
 # 4. Create necessary directories
 mkdir temp
@@ -247,7 +273,7 @@ API_PORT=8000
 # Model configuration
 MAX_FILE_SIZE=20971520  # 20 MB
 USE_GPU=false
-DEFAULT_MODEL_NAME=best_model3 (3)_acc
+# Default mapping is configured in app/config.py (DEFAULT_MODEL_BY_CONTENT)
 
 # Features
 ENABLE_VIDEO_SUPPORT=false
@@ -279,7 +305,7 @@ print(response.json())
 with open('image.jpg', 'rb') as f:
     files = {'file': f}
     params = {
-        'model': 'best_model3 (3)_acc',
+        'model': 'model_photo',
         'threshold': 0.5
     }
     response = requests.post(
@@ -460,4 +486,3 @@ Notes:
 - Models are mounted from `./models` (read-only).
 - Temporary files are written to `./temp`.
 - Configure environment via `docker-compose.yml` or a `.env` file.
-
