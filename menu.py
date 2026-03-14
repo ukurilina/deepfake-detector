@@ -36,6 +36,9 @@ def print_menu():
     print("6.  ⚙️  Configuration Help")
     print("7.  🔧 Troubleshooting")
     print("8.  📊 View Project Statistics")
+    print("9.  🚀 Run Backend Server (uvicorn)")
+    print("10. 🌐 Run Frontend Server (http.server)")
+    print("11. 📊 Run Backend + Frontend")
     print("0.  ❌ Exit")
     print("\n" + "-" * 80)
 
@@ -50,7 +53,7 @@ def print_docs_menu():
 
     for i, (file, desc) in enumerate(docs, 1):
         print(f"{i}. {file:<30} - {desc}")
-    print(f"{len(docs)+1}. Back to Main Menu")
+    print(f"{len(docs) + 1}. Back to Main Menu")
     print("\n" + "-" * 80)
 
 
@@ -139,11 +142,11 @@ def view_structure():
  │   └── video_utils.py               - Video processing
  │
  ├── 📂 models/                        - ML models
- │   ├── best_model3 (3)_acc.keras    - Model 1
- │   └── best_model3 (4)_loss.keras   - Model 2
+ │   ├── model_photo.keras            - Image model
+ │   └── model_video.keras            - Video model
  │
  ├── 📂 temp/                          - Temporary files
- 
+
  📊 STATISTICS
  - Code: app + docs
  - Documentation: README, PROJECT_STRUCTURE
@@ -170,12 +173,12 @@ def view_code_files():
 
     for i, (file, desc) in enumerate(files, 1):
         print(f"{i}. {file:<30} - {desc}")
-    print(f"{len(files)+1}. Back to Main Menu")
+    print(f"{len(files) + 1}. Back to Main Menu")
 
     choice = input("\nSelect file to view: ").strip()
 
     if choice.isdigit() and int(choice) <= len(files):
-        file = files[int(choice)-1][0]
+        file = files[int(choice) - 1][0]
         if Path(file).exists():
             print(f"\n📖 Opening {file}...\n")
             if os.name == 'nt':
@@ -291,19 +294,93 @@ Error Handling:      Basic → Comprehensive
 Logging:             ❌  → ✅ Structured
 Monitoring:          ❌  → ✅ Health Checks
 Architecture:        Basic → Enterprise-grade
- 
+
  TECHNOLOGY STACK
- 
+
  Backend:  FastAPI 0.104+, Uvicorn 0.24+
  ML:       TensorFlow 2.13+
  Docs:     Markdown + Swagger
- 
+
  TIMELINE
- 
+
  Setup:         5 min
  Local Dev:     10 min
  Total Time:    ~15-20 min to production
  """)
+
+    input("\nPress Enter to continue...")
+
+
+def run_command(cmd, title, cwd=None):
+    """Унифицированный запуск команд с понятным заголовком и обработкой ошибок."""
+    clear_screen()
+    print_header()
+    print(f"\n{title}\n")
+    print(f"$ {cmd}\n")
+    try:
+        subprocess.run(cmd, shell=True, check=False, cwd=cwd)
+    except KeyboardInterrupt:
+        print("\n⚠ Command interrupted by user")
+    except Exception as exc:
+        print(f"\n❌ Failed to run command: {exc}")
+    input("\nPress Enter to continue...")
+
+
+def open_file(file_path):
+    """Открывает файл системным приложением, если файл существует."""
+    path = Path(file_path)
+    if not path.exists():
+        print(f"❌ File not found: {file_path}")
+        input("Press Enter to continue...")
+        return
+
+    try:
+        if os.name == 'nt':
+            os.startfile(str(path))
+        else:
+            subprocess.run(["xdg-open", str(path)], check=False)
+        print(f"✅ Opened: {file_path}")
+    except Exception as exc:
+        print(f"❌ Cannot open file: {exc}")
+    input("Press Enter to continue...")
+
+
+def run_backend_server():
+    run_command(
+        "python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+        "🚀 Backend server will be available at http://127.0.0.1:8000",
+    )
+
+
+def run_frontend_server():
+    run_command(
+        "python -m http.server 3000",
+        "🌐 Frontend server will be available at http://127.0.0.1:3000",
+        cwd="frontend",
+    )
+
+
+def run_backend_and_frontend():
+    clear_screen()
+    print_header()
+    print("\n📊 Running backend + frontend in separate terminals\n")
+
+    if os.name == 'nt':
+        subprocess.Popen(
+            'start cmd /k "python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"',
+            shell=True,
+        )
+        subprocess.Popen(
+            'start cmd /k "cd frontend && python -m http.server 3000"',
+            shell=True,
+        )
+        print("✅ Backend:  http://127.0.0.1:8000")
+        print("✅ Frontend: http://127.0.0.1:3000")
+    else:
+        print("⚠ Auto dual-start is configured for Windows only.")
+        print("Run manually in two terminals:")
+        print("  1) python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000")
+        print("  2) cd frontend && python -m http.server 3000")
 
     input("\nPress Enter to continue...")
 
@@ -337,6 +414,12 @@ def main():
             view_troubleshooting()
         elif choice == "8":
             view_statistics()
+        elif choice == "9":
+            run_backend_server()
+        elif choice == "10":
+            run_frontend_server()
+        elif choice == "11":
+            run_backend_and_frontend()
         elif choice == "0":
             print("\n👋 Thank you for using Deepfake Detector!\n")
             break

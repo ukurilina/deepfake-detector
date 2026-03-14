@@ -1,18 +1,87 @@
 import { APP_CONFIG } from "./config.js";
-import { analyzeFileByUrl, detectImage, fetchModels } from "./api.js";
-import { buildVerdict, safePercent, setStatus, setText, toggleHidden } from "./ui.js";
+import { analyzeFileByUrl, detectFile, fetchModelsByContentType } from "./api.js";
+import {
+  buildVerdict,
+  drawHeatmapToCanvas,
+  drawImageRegions,
+  findSuspiciousRegions,
+  resetHeatmapView,
+  safePercent,
+  setStatus,
+  setText,
+  toggleHidden,
+  validateHeatmap2D,
+} from "./ui.js";
 
-function validateFile(file) {
+const heatmapState = {
+  frameHeatmaps: [],
+  currentFrameIndex: 0,
+  sourceImageUrl: "",
+  sourceImageIsObjectUrl: false,
+};
+
+function clearSourceImageUrl() {
+  if (heatmapState.sourceImageUrl && heatmapState.sourceImageIsObjectUrl) {
+    URL.revokeObjectURL(heatmapState.sourceImageUrl);
+  }
+  heatmapState.sourceImageUrl = "";
+  heatmapState.sourceImageIsObjectUrl = false;
+}
+
+function setSourceImageFromFile(file, contentType) {
+  clearSourceImageUrl();
+  if (contentType !== "photo" || !file) {
+    return;
+  }
+  heatmapState.sourceImageUrl = URL.createObjectURL(file);
+  heatmapState.sourceImageIsObjectUrl = true;
+}
+
+function setSourceImageFromUrl(url, contentType) {
+  clearSourceImageUrl();
+  if (contentType !== "photo" || !url) {
+    return;
+  }
+  heatmapState.sourceImageUrl = url;
+  heatmapState.sourceImageIsObjectUrl = false;
+}
+
+function getMediaConfig(contentType) {
+  return APP_CONFIG.SUPPORTED_MEDIA[contentType] || APP_CONFIG.SUPPORTED_MEDIA.photo;
+}
+
+function getDefaultThresholdPercent(contentType) {
+  void contentType;
+  return APP_CONFIG.DEFAULT_THRESHOLD;
+}
+
+function setThresholdDefault(input, contentType) {
+  if (!input) {
+    return;
+  }
+  const nextValue = getDefaultThresholdPercent(contentType);
+  input.value = String(Number(nextValue.toFixed(6)));
+}
+
+function parseThresholdPercent(inputValue, contentType) {
+  const raw = String(inputValue ?? "").trim();
+  const effective = raw === "" ? getDefaultThresholdPercent(contentType) : Number(raw);
+  return effective;
+}
+
+function validateFile(file, contentType) {
   if (!file) {
-    return "Выберите файл изображения.";
+    return "Выберите файл.";
   }
 
+  const mediaConfig = getMediaConfig(contentType);
+
   const lowerName = (file.name || "").toLowerCase();
-  const hasAllowedExtension = APP_CONFIG.SUPPORTED_EXTENSIONS.some((ext) => lowerName.endsWith(ext));
-  const hasAllowedMime = (file.type || "").startsWith(APP_CONFIG.SUPPORTED_MIME_PREFIX);
+  const hasAllowedExtension = mediaConfig.extensions.some((ext) => lowerName.endsWith(ext));
+  const hasAllowedMime = (file.type || "").startsWith(mediaConfig.mimePrefix);
 
   if (!hasAllowedExtension || !hasAllowedMime) {
-    return `Неподдерживаемый тип файла. Разрешено: ${APP_CONFIG.SUPPORTED_EXTENSIONS.join(", ")}`;
+    return `Неподдерживаемый тип файла. Разрешено: ${mediaConfig.extensions.join(", ")}`;
   }
 
   const maxBytes = APP_CONFIG.MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -48,26 +117,144 @@ function normalizeResult(payload) {
   return {
     percent,
     label: payload?.label || "",
-    confidencePercent: safePercent(Number(payload?.confidence) * 100),
     modelUsed: payload?.model_used || "Н/Д",
     thresholdPercent: safePercent(Number(payload?.threshold) * 100),
+    heatmap: validateHeatmap2D(payload?.heatmap) ? payload.heatmap : null,
+    frameHeatmaps: Array.isArray(payload?.frame_heatmaps)
+      ? payload.frame_heatmaps.filter((frame) => validateHeatmap2D(frame))
+      : [],
+    sourceImageDataUrl: typeof payload?.source_image_data_url === "string" ? payload.source_image_data_url : "",
   };
 }
 
-function renderResult(result) {
+function getHeatmapSizeLabel(heatmap) {
+  if (!validateHeatmap2D(heatmap)) {
+    return "Н/Д";
+  }
+  return `${heatmap[0].length}x${heatmap.length}`;
+}
+
+function renderVideoHeatmapFrame(frameIndex) {
+  const range = document.getElementById("heatmapFrameRange");
+  const indicator = document.getElementById("heatmapFrameIndicator");
+  const meta = document.getElementById("heatmapMeta");
+
+  if (!heatmapState.frameHeatmaps.length) {
+    resetHeatmapView();
+    return;
+  }
+
+  const clampedIndex = Math.max(0, Math.min(heatmapState.frameHeatmaps.length - 1, frameIndex));
+  heatmapState.currentFrameIndex = clampedIndex;
+  const currentHeatmap = heatmapState.frameHeatmaps[clampedIndex];
+
+  const drawn = drawHeatmapToCanvas("heatmapCanvas", currentHeatmap);
+  if (!drawn) {
+    resetHeatmapView();
+    return;
+  }
+
+  if (range) {
+    range.value = String(clampedIndex);
+  }
+  if (indicator) {
+    indicator.textContent = `Кадр ${clampedIndex + 1} из ${heatmapState.frameHeatmaps.length}`;
+  }
+  if (meta) {
+    meta.textContent = `Размер карты: ${getHeatmapSizeLabel(currentHeatmap)}`;
+  }
+}
+
+async function renderHeatmap(result) {
+  const controls = document.getElementById("videoHeatmapControls");
+  const range = document.getElementById("heatmapFrameRange");
+
+  if (result.frameHeatmaps.length) {
+    heatmapState.frameHeatmaps = result.frameHeatmaps;
+    heatmapState.currentFrameIndex = 0;
+    toggleHidden("heatmapSection", false);
+    toggleHidden("videoHeatmapControls", false);
+
+    if (range) {
+      range.min = "0";
+      range.max = String(result.frameHeatmaps.length - 1);
+      range.step = "1";
+      range.value = "0";
+    }
+
+    renderVideoHeatmapFrame(0);
+    toggleHidden("regionsSection", true);
+    setText("regionsMeta", "");
+    return;
+  }
+
+  heatmapState.frameHeatmaps = [];
+  heatmapState.currentFrameIndex = 0;
+
+  if (result.heatmap) {
+    const drawn = drawHeatmapToCanvas("heatmapCanvas", result.heatmap);
+    if (!drawn) {
+      resetHeatmapView();
+      return;
+    }
+
+    toggleHidden("heatmapSection", false);
+    toggleHidden("videoHeatmapControls", true);
+    setText("heatmapMeta", `Размер карты: ${getHeatmapSizeLabel(result.heatmap)}`);
+    setText("heatmapFrameIndicator", "");
+
+    const regions = findSuspiciousRegions(result.heatmap);
+    const hasSourceImage = Boolean(heatmapState.sourceImageUrl);
+    if (regions.length && hasSourceImage) {
+      const heatmapWidth = result.heatmap[0]?.length || 0;
+      const heatmapHeight = result.heatmap.length;
+      const rendered = await drawImageRegions(
+        "regionsCanvas",
+        heatmapState.sourceImageUrl,
+        regions,
+        heatmapWidth,
+        heatmapHeight
+      );
+      if (rendered) {
+        toggleHidden("regionsSection", false);
+        setText("regionsMeta", `Найдено спорных областей: ${regions.length}`);
+      } else {
+        toggleHidden("regionsSection", true);
+        setText("regionsMeta", "");
+      }
+    } else {
+      toggleHidden("regionsSection", true);
+      setText("regionsMeta", "");
+    }
+    return;
+  }
+
+  if (controls) {
+    toggleHidden("videoHeatmapControls", true);
+  }
+  toggleHidden("regionsSection", true);
+  setText("regionsMeta", "");
+  resetHeatmapView();
+}
+
+async function renderResult(result) {
   toggleHidden("result", false);
   setText("resultPercent", result.percent === null ? "Н/Д" : `${result.percent.toFixed(2)}%`);
   setText("resultVerdict", buildVerdict(result.percent, result.label));
   setText("resultLabel", result.label || "Н/Д");
-  setText(
-    "resultConfidence",
-    Number.isFinite(result.confidencePercent) ? `${result.confidencePercent.toFixed(2)}%` : "Н/Д"
-  );
   setText("resultModel", result.modelUsed);
   setText(
     "resultThreshold",
     Number.isFinite(result.thresholdPercent) ? `${result.thresholdPercent.toFixed(2)}%` : "Н/Д"
   );
+  await renderHeatmap(result);
+}
+
+function isModelAllowedForContent(selectedModel, allowedModels) {
+  if (!selectedModel) {
+    return true;
+  }
+  return Array.isArray(allowedModels) && allowedModels.includes(selectedModel);
 }
 
 async function runDetection(requestFactory) {
@@ -78,48 +265,88 @@ async function runDetection(requestFactory) {
     const payload = await requestFactory();
     const result = normalizeResult(payload);
 
-    if (result.percent === null) {
-      throw new Error("Ответ сервера не содержит полей вероятности.");
+    if (result.sourceImageDataUrl) {
+      setSourceImageFromUrl(result.sourceImageDataUrl, "photo");
     }
 
-    renderResult(result);
+    if (result.percent === null) {
+      setStatus("Ответ сервера не содержит полей вероятности.", "error");
+      return;
+    }
+
+    await renderResult(result);
     setStatus("Проверка успешно завершена.", "success");
   } catch (error) {
     setStatus(error.message || "Непредвиденная ошибка.", "error");
   }
 }
 
-async function loadModels() {
-  const modelSelect = document.getElementById("modelSelect");
-  const urlModelSelect = document.getElementById("urlModelSelect");
-
-  if (!modelSelect && !urlModelSelect) {
+async function populateModelSelect(select, contentType) {
+  if (!select) {
     return;
   }
 
-  const selectors = [modelSelect, urlModelSelect].filter(Boolean);
-
   try {
-    const models = await fetchModels();
+    const { models, defaultModel } = await fetchModelsByContentType(contentType);
+    select.dataset.allowedModels = JSON.stringify(models);
     if (!models.length) {
-      for (const select of selectors) {
-        select.innerHTML = '<option value="">Нет доступных моделей</option>';
-        select.disabled = true;
-      }
+      select.innerHTML = '<option value="">Нет доступных моделей</option>';
+      select.disabled = true;
       return;
     }
 
-    for (const select of selectors) {
-      select.innerHTML = '<option value="">Модель по умолчанию</option>';
-      for (const model of models) {
-        const option = document.createElement("option");
-        option.value = model;
-        option.textContent = model;
-        select.appendChild(option);
+    select.disabled = false;
+    select.innerHTML = '<option value="">Модель по умолчанию</option>';
+    for (const model of models) {
+      const option = document.createElement("option");
+      option.value = model;
+      option.textContent = model;
+      if (defaultModel && model === defaultModel) {
+        option.textContent = `${model} (по умолчанию)`;
       }
+      select.appendChild(option);
     }
   } catch (error) {
+    select.dataset.allowedModels = JSON.stringify([]);
+    select.innerHTML = '<option value="">Ошибка загрузки моделей</option>';
+    select.disabled = true;
     setStatus(`Не удалось загрузить модели: ${error.message}`, "error");
+  }
+}
+
+function getAllowedModelsFromSelect(select) {
+  if (!select) {
+    return [];
+  }
+
+  try {
+    const raw = select.dataset.allowedModels || "[]";
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+function syncFileUiByContentType(contentType, refs) {
+  const mediaConfig = getMediaConfig(contentType);
+  const isComingSoon = Boolean(mediaConfig.comingSoon);
+
+  if (contentType === "video") {
+    refs.fileInputLabel.textContent = "Видеофайл";
+  } else if (contentType === "audio") {
+    refs.fileInputLabel.textContent = "Аудиофайл";
+  } else {
+    refs.fileInputLabel.textContent = "Файл изображения";
+  }
+  refs.fileInput.setAttribute("accept", mediaConfig.inputAccept);
+  refs.submitButton.textContent = mediaConfig.submitText;
+  refs.submitButton.disabled = isComingSoon;
+
+  if (isComingSoon) {
+    setStatus("Проверка аудио будет добавлена позже.", "error");
+  } else {
+    setStatus("");
   }
 }
 
@@ -128,6 +355,7 @@ function setMode(mode) {
   toggleHidden("fileSection", !isFileMode);
   toggleHidden("urlSection", isFileMode);
   toggleHidden("result", true);
+  resetHeatmapView();
   setStatus("");
 
   const fileBtn = document.getElementById("modeFileButton");
@@ -149,9 +377,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const resetButton = document.getElementById("resetButton");
   const thresholdInput = document.getElementById("thresholdInput");
   const modelSelect = document.getElementById("modelSelect");
+  const fileContentTypeSelect = document.getElementById("fileContentTypeSelect");
+  const fileInputLabel = document.getElementById("fileInputLabel");
   const urlModelSelect = document.getElementById("urlModelSelect");
+  const urlContentTypeSelect = document.getElementById("urlContentTypeSelect");
 
   const modeFileButton = document.getElementById("modeFileButton");
+  const modeAudioButton = document.getElementById("modeAudioButton");
   const modeUrlButton = document.getElementById("modeUrlButton");
 
   const urlForm = document.getElementById("urlForm");
@@ -159,45 +391,114 @@ document.addEventListener("DOMContentLoaded", () => {
   const urlSubmitButton = document.getElementById("urlSubmitButton");
   const thresholdInputUrl = document.getElementById("thresholdInputUrl");
   const urlResetButton = document.getElementById("urlResetButton");
+  const heatmapRange = document.getElementById("heatmapFrameRange");
+  const heatmapPrevFrame = document.getElementById("heatmapPrevFrame");
+  const heatmapNextFrame = document.getElementById("heatmapNextFrame");
 
-  loadModels();
+  const refs = {
+    fileInput,
+    submitButton,
+    fileInputLabel,
+  };
+
+  const initialFileContentType = fileContentTypeSelect?.value || "photo";
+  const initialUrlContentType = urlContentTypeSelect?.value || "photo";
+  setThresholdDefault(thresholdInput, initialFileContentType);
+  setThresholdDefault(thresholdInputUrl, initialUrlContentType);
+  syncFileUiByContentType(initialFileContentType, refs);
+  populateModelSelect(modelSelect, initialFileContentType);
+  populateModelSelect(urlModelSelect, initialUrlContentType);
   setMode("file");
 
   modeFileButton?.addEventListener("click", () => setMode("file"));
+  modeAudioButton?.addEventListener("click", async () => {
+    setMode("file");
+    if (fileContentTypeSelect) {
+      fileContentTypeSelect.value = "audio";
+      syncFileUiByContentType("audio", refs);
+      await populateModelSelect(modelSelect, "audio");
+    }
+  });
   modeUrlButton?.addEventListener("click", () => setMode("url"));
+
+  heatmapRange?.addEventListener("input", () => {
+    renderVideoHeatmapFrame(Number(heatmapRange.value));
+  });
+
+  heatmapPrevFrame?.addEventListener("click", () => {
+    renderVideoHeatmapFrame(heatmapState.currentFrameIndex - 1);
+  });
+
+  heatmapNextFrame?.addEventListener("click", () => {
+    renderVideoHeatmapFrame(heatmapState.currentFrameIndex + 1);
+  });
+
+  fileContentTypeSelect?.addEventListener("change", async () => {
+    const contentType = fileContentTypeSelect.value;
+    setThresholdDefault(thresholdInput, contentType);
+    syncFileUiByContentType(contentType, refs);
+    await populateModelSelect(modelSelect, contentType);
+  });
+
+  urlContentTypeSelect?.addEventListener("change", async () => {
+    const contentType = urlContentTypeSelect.value;
+    setThresholdDefault(thresholdInputUrl, contentType);
+    await populateModelSelect(urlModelSelect, contentType);
+  });
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
 
+    const contentType = fileContentTypeSelect?.value || "photo";
+    const mediaConfig = getMediaConfig(contentType);
+    if (mediaConfig.comingSoon) {
+      setStatus("Проверка аудио будет добавлена позже.", "error");
+      return;
+    }
+
     const file = fileInput?.files?.[0];
-    const validationError = validateFile(file);
+    const validationError = validateFile(file, contentType);
     if (validationError) {
       setStatus(validationError, "error");
       return;
     }
 
-    const thresholdPercent = Number(thresholdInput?.value ?? APP_CONFIG.DEFAULT_THRESHOLD);
+    const thresholdPercent = parseThresholdPercent(thresholdInput?.value, contentType);
     if (!Number.isFinite(thresholdPercent) || thresholdPercent < 0 || thresholdPercent > 100) {
       setStatus("Порог срабатывания должен быть в диапазоне от 0% до 100%.", "error");
       return;
     }
 
     const threshold = thresholdPercent / 100;
+    const selectedModel = modelSelect?.value || "";
+    const allowedModels = getAllowedModelsFromSelect(modelSelect);
+    if (!isModelAllowedForContent(selectedModel, allowedModels)) {
+      setStatus("Выбранная модель не соответствует типу контента. Выберите модель из списка.", "error");
+      return;
+    }
 
     submitButton.disabled = true;
     submitButton.textContent = "Анализ...";
-    setStatus("Отправка изображения в модель...");
+    if (contentType === "video") {
+      setStatus("Отправка видео в модель...");
+    } else if (contentType === "audio") {
+      setStatus("Отправка аудио в модель...");
+    } else {
+      setStatus("Отправка изображения в модель...");
+    }
+    setSourceImageFromFile(file, contentType);
 
     await runDetection(() =>
-      detectImage({
+      detectFile({
         file,
-        model: modelSelect?.value || "",
+        model: selectedModel,
         threshold,
+        contentType,
       })
     );
 
     submitButton.disabled = false;
-    submitButton.textContent = "Проверить изображение";
+    submitButton.textContent = mediaConfig.submitText;
   });
 
   urlForm?.addEventListener("submit", async (event) => {
@@ -210,23 +511,38 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const thresholdPercent = Number(thresholdInputUrl?.value ?? APP_CONFIG.DEFAULT_THRESHOLD);
+    const contentType = urlContentTypeSelect?.value || "photo";
+    const mediaConfig = getMediaConfig(contentType);
+    if (mediaConfig.comingSoon) {
+      setStatus("Проверка аудио по URL будет добавлена позже.", "error");
+      return;
+    }
+
+    const thresholdPercent = parseThresholdPercent(thresholdInputUrl?.value, contentType);
     if (!Number.isFinite(thresholdPercent) || thresholdPercent < 0 || thresholdPercent > 100) {
       setStatus("Порог срабатывания должен быть в диапазоне от 0% до 100%.", "error");
       return;
     }
 
     const threshold = thresholdPercent / 100;
+    const selectedModel = urlModelSelect?.value || "";
+    const allowedModels = getAllowedModelsFromSelect(urlModelSelect);
+    if (!isModelAllowedForContent(selectedModel, allowedModels)) {
+      setStatus("Выбранная модель не соответствует типу контента. Выберите модель из списка.", "error");
+      return;
+    }
 
     urlSubmitButton.disabled = true;
     urlSubmitButton.textContent = "Анализ...";
     setStatus("Скачивание файла по URL и анализ...");
+    setSourceImageFromUrl(urlValue, contentType);
 
     await runDetection(() =>
       analyzeFileByUrl({
         url: urlValue,
-        model: urlModelSelect?.value || "",
+        model: selectedModel,
         threshold,
+        contentType,
       })
     );
 
@@ -235,14 +551,29 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   resetButton?.addEventListener("click", () => {
+    clearSourceImageUrl();
     form?.reset();
+    const contentType = fileContentTypeSelect?.value || "photo";
+    setThresholdDefault(thresholdInput, contentType);
+    syncFileUiByContentType(contentType, refs);
+    populateModelSelect(modelSelect, contentType);
     setStatus("");
     toggleHidden("result", true);
+    resetHeatmapView();
   });
 
   urlResetButton?.addEventListener("click", () => {
+    clearSourceImageUrl();
     urlForm?.reset();
+    const contentType = urlContentTypeSelect?.value || "photo";
+    setThresholdDefault(thresholdInputUrl, contentType);
+    populateModelSelect(urlModelSelect, contentType);
     setStatus("");
     toggleHidden("result", true);
+    resetHeatmapView();
+  });
+
+  window.addEventListener("beforeunload", () => {
+    clearSourceImageUrl();
   });
 });
