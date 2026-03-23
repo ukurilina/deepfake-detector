@@ -1,9 +1,15 @@
+import os
+import time
+
 import numpy as np
 import tensorflow as tf
 from PIL import Image
 from typing import Optional, Tuple, List, Dict, Any
 import io
 import base64
+
+import keras
+from keras import layers
 
 try:
     import cv2
@@ -23,6 +29,12 @@ except Exception:  # pragma: no cover
 from app.config import AppConfig
 from app.models_manager import ModelManager
 from app.video_utils import get_key_frames
+
+# Foolbox is optional; protection endpoints will validate availability.
+try:
+    import foolbox as fb
+except Exception:  # pragma: no cover
+    fb = None
 
 # Инициализация менеджера моделей
 _model_manager = ModelManager()
@@ -163,6 +175,382 @@ def _resize_array_hwc(arr: np.ndarray, target_size: Tuple[int, int]) -> np.ndarr
         return arr
     resized = tf.image.resize(arr, [h, w], method="bilinear")
     return tf.cast(resized, tf.float32).numpy()
+
+
+def prepare_image_for_model(image_path: str, model) -> Tuple[List[np.ndarray], Dict[str, Any]]:
+    """Prepares image inputs for the given Keras model.
+
+    Returns:
+        (model_inputs, meta) where model_inputs is a list aligned with model.inputs.
+    """
+    specs = _infer_photo_model_specs(model)
+    img = Image.open(image_path).convert("RGB")
+    rgb_uint8 = np.asarray(img, dtype=np.uint8)
+
+    # Center face for photo (as requested earlier).
+    rgb_uint8 = _center_face_crop_with_insightface(rgb_uint8)
+
+    rgb_uint8 = _resize_rgb_uint8(rgb_uint8, specs["rgb_size"])
+    rgb = rgb_uint8.astype(np.float32) / 255.0
+
+    inputs = [None] * max(1, len(getattr(model, "inputs", []) or [0]))
+    if specs["fft_index"] is None:
+        inputs[specs["rgb_index"]] = rgb[None, ...]
+    else:
+        fft = compute_fft(rgb, crop_ratio=0.4)
+        fft = _resize_array_hwc(fft, specs["fft_size"])
+        inputs[specs["rgb_index"]] = rgb[None, ...]
+        inputs[specs["fft_index"]] = fft[None, ...]
+
+    meta = {
+        **specs,
+        "rgb_preview_uint8": rgb_uint8,
+    }
+    return inputs, meta
+
+
+def prepare_video_frames_for_model(
+    video_path: str,
+    model,
+    max_frames: int = 24,
+    frame_stride: int = 1,
+    return_frames_rgb_uint8: bool = False,
+) -> Tuple[List[np.ndarray], Dict[str, Any]]:
+    """Prepares video tensors exactly like inference.
+
+    Uses existing key-frame extraction and InsightFace alignment.
+    """
+    # NOTE: video model expected input sizes are inferred similarly to photo models, but with TimeDistributed.
+    inputs = getattr(model, "inputs", None) or []
+    if len(inputs) < 1:
+        raise ValueError("Video model has no inputs")
+
+    # Infer per-frame size from first input (B, T, H, W, C)
+    shape = tuple(inputs[0].shape)
+    h = _to_int_dim(shape[2] if len(shape) > 2 else None, 112)
+    w = _to_int_dim(shape[3] if len(shape) > 3 else None, 112)
+    target_size = (h, w)
+
+    # Grab frames
+    frames = get_key_frames(video_path, num_frames=max_frames)
+    # frames returned as RGB uint8
+    if not frames:
+        raise ValueError("Could not extract frames from video")
+
+    # Subsample stride
+    frames = frames[:: max(1, int(frame_stride))]
+
+    # Align each frame similarly to neuro.py (InsightFace).
+    aligned_frames = []
+    last_transform = None
+    for fr in frames:
+        if AppConfig.ENABLE_FACE_ALIGN_FOR_VIDEO:
+            aligned, last_transform = _align_face_frame_with_insightface(
+                fr,
+                target_size=target_size,
+                fallback_transform=last_transform if AppConfig.REUSE_LAST_VIDEO_FACE_TRANSFORM else None,
+            )
+        else:
+            aligned = _resize_rgb_uint8(fr, target_size)
+        aligned_frames.append(aligned)
+
+    rgb_uint8 = np.stack(aligned_frames, axis=0)
+    rgb = rgb_uint8.astype(np.float32) / 255.0
+
+    # Model in this project expects [video_rgb, video_fft]
+    # FFT branch is computed from RGB.
+    fft_frames = np.stack([compute_fft(f, crop_ratio=None) for f in rgb], axis=0)
+    fft_frames = np.asarray(fft_frames, dtype=np.float32)
+
+    meta = {
+        "rgb_index": 0,
+        "fft_index": 1 if len(inputs) > 1 else None,
+        "rgb_size": target_size,
+        "frames": int(rgb.shape[0]),
+    }
+
+    model_inputs = [None] * len(inputs)
+    model_inputs[0] = rgb
+    if meta["fft_index"] is not None:
+        model_inputs[1] = fft_frames
+    if return_frames_rgb_uint8:
+        meta["frames_rgb_uint8"] = rgb_uint8
+    return model_inputs, meta
+
+
+def _build_photo_foolbox_wrapper(model, model_name: str):
+    """Creates a Keras model that takes only RGB (B,H,W,3) and forwards to the original model.
+
+    If the original model has an FFT input, we compute it via tf ops (no external deps).
+    """
+    specs = _infer_photo_model_specs(model)
+    rgb_input = keras.Input(shape=(specs["rgb_size"][0], specs["rgb_size"][1], 3), name=f"{model_name}_rgb")
+
+    if specs["fft_index"] is None:
+        out = model(rgb_input)
+    else:
+        # Pure TF approximation of compute_fft wrapped into Keras layers (Keras 3 requirement).
+        gray = layers.Lambda(lambda x: tf.image.rgb_to_grayscale(x), name=f"{model_name}_fft_gray")(rgb_input)
+        gray = layers.Lambda(lambda x: tf.squeeze(x, axis=-1), name=f"{model_name}_fft_squeeze")(gray)
+
+        def _fft2d_layer(x):
+            x = tf.cast(x, tf.complex64)
+            f = tf.signal.fft2d(x)
+            return tf.signal.fftshift(f)
+
+        fft2d = layers.Lambda(_fft2d_layer, name=f"{model_name}_fft2d")(gray)
+
+        def _fft_features(f):
+            mag = tf.math.log(tf.abs(f) + 1e-8)
+            mag = (mag - tf.reduce_mean(mag, axis=[1, 2], keepdims=True)) / (
+                tf.math.reduce_std(mag, axis=[1, 2], keepdims=True) + 1e-8
+            )
+            phase = tf.math.angle(f)
+            return tf.stack([mag, tf.sin(phase), tf.cos(phase)], axis=-1)
+
+        fft = layers.Lambda(_fft_features, name=f"{model_name}_fft_features")(fft2d)
+        fft = layers.Lambda(lambda x: tf.image.central_crop(x, 0.4), name=f"{model_name}_fft_crop")(fft)
+        fft = layers.Resizing(specs["fft_size"][0], specs["fft_size"][1], interpolation="bilinear", name=f"{model_name}_fft_resize")(fft)
+
+        inputs = [None] * len(model.inputs)
+        inputs[specs["rgb_index"]] = rgb_input
+        inputs[specs["fft_index"]] = fft
+        out = model(inputs)
+
+    return keras.Model(rgb_input, out, name=f"{model_name}_foolbox")
+
+
+def _build_video_foolbox_wrapper(model, model_name: str):
+    # video: (B,T,H,W,3)
+    inp0 = getattr(model, "inputs", None)[0]
+    shape = tuple(inp0.shape)
+    t_fixed = _to_int_dim(shape[1] if len(shape) > 1 else None, 0)
+    h = _to_int_dim(shape[2] if len(shape) > 2 else None, 112)
+    w = _to_int_dim(shape[3] if len(shape) > 3 else None, 112)
+    rgb_input = keras.Input(shape=((t_fixed or None), h, w, 3), name=f"{model_name}_video_rgb")
+
+    if len(model.inputs) < 2:
+        out = model(rgb_input)
+        return keras.Model(rgb_input, out, name=f"{model_name}_video_foolbox")
+
+    # Pure TF approximation of compute_fft for a video sequence (wrapped as Keras layers).
+    def _flatten_bt(x):
+        b = tf.shape(x)[0]
+        t = tf.shape(x)[1]
+        return tf.reshape(x, (b * t, h, w, 3))
+
+    flat = layers.Lambda(
+        _flatten_bt,
+        output_shape=(h, w, 3),
+        name=f"{model_name}_vfft_flat",
+    )(rgb_input)
+    gray = layers.Lambda(
+        lambda x: tf.image.rgb_to_grayscale(x),
+        output_shape=(h, w, 1),
+        name=f"{model_name}_vfft_gray",
+    )(flat)
+    gray = layers.Lambda(
+        lambda x: tf.squeeze(x, axis=-1),
+        output_shape=(h, w),
+        name=f"{model_name}_vfft_squeeze",
+    )(gray)
+
+    def _fft2d_layer(x):
+        x = tf.cast(x, tf.complex64)
+        f = tf.signal.fft2d(x)
+        return tf.signal.fftshift(f)
+
+    fft2d = layers.Lambda(
+        _fft2d_layer,
+        output_shape=(h, w),
+        name=f"{model_name}_vfft2d",
+    )(gray)
+
+    def _fft_features(f):
+        mag = tf.math.log(tf.abs(f) + 1e-8)
+        mag = (mag - tf.reduce_mean(mag, axis=[1, 2], keepdims=True)) / (
+            tf.math.reduce_std(mag, axis=[1, 2], keepdims=True) + 1e-8
+        )
+        phase = tf.math.angle(f)
+        return tf.stack([mag, tf.sin(phase), tf.cos(phase)], axis=-1)
+
+    fft_flat = layers.Lambda(
+        _fft_features,
+        output_shape=(h, w, 3),
+        name=f"{model_name}_vfft_features",
+    )(fft2d)
+
+    def _unflatten_bt(x):
+        b = tf.shape(rgb_input)[0]
+        t = tf.shape(rgb_input)[1]
+        return tf.reshape(x, (b, t, h, w, 3))
+
+    fft = layers.Lambda(
+        _unflatten_bt,
+        output_shape=((t_fixed or None), h, w, 3),
+        name=f"{model_name}_vfft_unflat",
+    )(fft_flat)
+    out = model([rgb_input, fft])
+    return keras.Model(rgb_input, out, name=f"{model_name}_video_foolbox")
+
+
+_FOOLBOX_WRAPPERS: Dict[str, keras.Model] = {}
+
+
+def get_foolbox_wrapper_model(model_name: str) -> keras.Model:
+    """Returns (and caches) a wrapper model suitable for Foolbox attacks."""
+    if model_name in _FOOLBOX_WRAPPERS:
+        return _FOOLBOX_WRAPPERS[model_name]
+
+    model = _model_manager.get_model(model_name)
+    if model is None:
+        raise ValueError(f"Model '{model_name}' is not loaded")
+    content_type = AppConfig.MODEL_REGISTRY.get(model_name, {}).get("content_type")
+    if content_type == "video":
+        wrapper = _build_video_foolbox_wrapper(model, model_name)
+    else:
+        wrapper = _build_photo_foolbox_wrapper(model, model_name)
+    _FOOLBOX_WRAPPERS[model_name] = wrapper
+    return wrapper
+
+
+def protect_with_foolbox(
+    content_type: str,
+    input_path: str,
+    model_name: str,
+    attack: str,
+    eps: float,
+    steps: int,
+    frame_stride: int = 1,
+    max_frames: int = 24,
+) -> Tuple[str, Dict[str, Any]]:
+    """Applies Foolbox-based protection and returns (output_path, meta)."""
+    if fb is None:
+        raise RuntimeError("Foolbox is not installed")
+
+    wrapper = get_foolbox_wrapper_model(model_name)
+    fmodel = fb.TensorFlowModel(wrapper, bounds=(0.0, 1.0))
+
+    if attack == "pgd":
+        attacker = fb.attacks.LinfPGD(steps=max(1, int(steps)))
+    else:
+        attacker = fb.attacks.FGSM()
+
+    # Prepare input for wrapper (only RGB)
+    if content_type == "video":
+        model_inputs, meta = prepare_video_frames_for_model(
+            input_path,
+            _model_manager.get_model(model_name),
+            max_frames=max_frames,
+            frame_stride=frame_stride,
+        )
+        x = np.asarray(model_inputs[0], dtype=np.float32)
+    else:
+        # Keep original size for output: protection must not change image resolution.
+        original_pil = Image.open(input_path).convert("RGB")
+        original_size = original_pil.size  # (W, H)
+
+        model_inputs, meta = prepare_image_for_model(input_path, _model_manager.get_model(model_name))
+        rgb_index = int(meta.get("rgb_index", 0))
+        x = np.asarray(model_inputs[rgb_index], dtype=np.float32)
+        meta["original_size"] = (int(original_size[1]), int(original_size[0]))  # (H, W)
+
+    if x.ndim == 3:
+        x = x[None, ...]
+
+    # Foolbox/EagerPy chooses backend based on the tensor type.
+    # Use TF tensors to enable gradients.
+    x_tf = tf.convert_to_tensor(x, dtype=tf.float32)
+
+    labels = tf.zeros((tf.shape(x_tf)[0],), dtype=tf.int64)
+    # Foolbox may return (raw_advs, clipped_advs, success) or just advs depending on attack.
+    adv = attacker(fmodel, x_tf, labels, epsilons=float(eps))
+    # Many Foolbox attacks return (raw_advs, clipped_advs, success)
+    if isinstance(adv, (tuple, list)):
+        if len(adv) >= 2:
+            adv = adv[1]
+        else:
+            adv = adv[0]
+
+    # Convert output to TF tensor reliably.
+    try:
+        import eagerpy as ep
+        adv_ep = ep.astensor(adv)
+        adv_tf = adv_ep.raw
+    except Exception:
+        adv_tf = adv
+        if hasattr(adv_tf, "raw"):
+            adv_tf = adv_tf.raw
+
+    adv_tf = tf.convert_to_tensor(adv_tf, dtype=tf.float32)
+    adv_tf = tf.clip_by_value(adv_tf, 0.0, 1.0)
+    adv_np = adv_tf.numpy()
+
+    # Save output
+    from app.protection import _new_protect_id, _create_protect_dir, _write_json  # local import to avoid cycles
+    protect_id = _new_protect_id()
+    out_dir = _create_protect_dir(protect_id)
+
+    if content_type == "video":
+        if cv2 is None:
+            raise RuntimeError("OpenCV is required for video protection")
+        frames_uint8 = (adv_np * 255.0).round().astype(np.uint8)
+        h, w = frames_uint8.shape[1:3]
+        out_path = os.path.join(out_dir, "output.mp4")
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(out_path, fourcc, 15.0, (w, h))
+        if not writer.isOpened():
+            raise RuntimeError("Could not open VideoWriter")
+        try:
+            for frame in frames_uint8:
+                writer.write(frame[:, :, ::-1])
+        finally:
+            writer.release()
+
+        meta_out = {
+            "created_at": time.time(),
+            "content_type": "video",
+            "model": model_name,
+            "attack": attack,
+            "eps": float(eps),
+            "steps": int(steps),
+            "frame_stride": int(frame_stride),
+            "max_frames": int(max_frames),
+            "frames": int(frames_uint8.shape[0]),
+            "output_file": "output.mp4",
+        }
+    else:
+        out_path = os.path.join(out_dir, "output.png")
+        # Ensure HWC
+        img_f = adv_np[0] if adv_np.ndim == 4 else adv_np
+        if img_f.ndim != 3 or img_f.shape[-1] != 3:
+            raise RuntimeError(f"Unexpected adversarial image shape: {img_f.shape}")
+        img_uint8 = (img_f * 255.0).round().astype(np.uint8)
+
+        out_img = Image.fromarray(img_uint8, mode="RGB")
+        # Resize back to original resolution.
+        original_hw = meta.get("original_size")
+        if original_hw and isinstance(original_hw, (tuple, list)) and len(original_hw) == 2:
+            oh, ow = int(original_hw[0]), int(original_hw[1])
+            if oh > 0 and ow > 0 and (out_img.size[0] != ow or out_img.size[1] != oh):
+                out_img = out_img.resize((ow, oh), resample=Image.BILINEAR)
+
+        out_img.save(out_path)
+        meta_out = {
+            "created_at": time.time(),
+            "content_type": "photo",
+            "model": model_name,
+            "attack": attack,
+            "eps": float(eps),
+            "steps": int(steps),
+            "output_file": "output.png",
+            "original_size": list(original_hw) if original_hw else None,
+        }
+
+    _write_json(os.path.join(out_dir, "meta.json"), meta_out)
+    meta_out["protect_id"] = protect_id
+    meta_out["output_path"] = out_path
+    return out_path, meta_out
 
 
 def _get_face_analyzer():

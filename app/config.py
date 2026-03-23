@@ -71,11 +71,51 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 
+# Optional explicit path to ffmpeg executable (useful on Windows if ffmpeg isn't on PATH).
+FFMPEG_PATH = os.getenv("FFMPEG_PATH", "") or None
+
+# Protection (Foolbox) output directory (kept under temp and auto cleaned).
+PROTECT_DIR = os.path.join(TEMP_DIR, "protected")
+
+# Protection defaults (tuned for minimal visible impact; can be overridden per request).
+PROTECT_DEFAULT_ATTACK = os.getenv("PROTECT_DEFAULT_ATTACK", "fgsm")  # fgsm|pgd
+PROTECT_DEFAULT_EPS = float(os.getenv("PROTECT_DEFAULT_EPS", "0.01"))
+PROTECT_DEFAULT_STEPS = int(os.getenv("PROTECT_DEFAULT_STEPS", "10"))
+PROTECT_DEFAULT_FRAME_STRIDE = int(os.getenv("PROTECT_DEFAULT_FRAME_STRIDE", "1"))
+PROTECT_MAX_FRAMES = int(os.getenv("PROTECT_MAX_FRAMES", "24"))
+PROTECT_TTL_SECONDS = int(os.getenv("PROTECT_TTL_SECONDS", str(60 * 20)))  # 20 min
+
+# AntiFake (audio protection)
+ANTIFAKE_DIR = os.path.join(BASE_DIR, "thirdparty", "AntiFake")
+ANTIFAKE_RUN_PY = os.path.join(ANTIFAKE_DIR, "run.py")
+ANTIFAKE_SPEAKER_DATABASE = os.path.join(ANTIFAKE_DIR, "speakers_database")
+
+# AntiFake requires additional weights downloaded separately per its README.
+# - Put tortoise weights under thirdparty/AntiFake/tortoise/: autoregressive.pth, diffusion_decoder.pth
+# - RTVC/Coqui/Tortoise stacks may require additional checkpoints. For the bundled RTVC code path,
+#   the default model folder typically contains encoder.pt and vocoder.pt.
+ANTIFAKE_REQUIRED_FILES = {
+    "tortoise_autoregressive": os.path.join(ANTIFAKE_DIR, "tortoise", "autoregressive.pth"),
+    "tortoise_diffusion_decoder": os.path.join(ANTIFAKE_DIR, "tortoise", "diffusion_decoder.pth"),
+    "rtvc_encoder": os.path.join(ANTIFAKE_DIR, "saved_models", "default", "encoder.pt"),
+    "rtvc_vocoder": os.path.join(ANTIFAKE_DIR, "saved_models", "default", "vocoder.pt"),
+}
+
+# Audio protection defaults
+ANTIFAKE_MAX_SECONDS = float(os.getenv("ANTIFAKE_MAX_SECONDS", "20"))
+ANTIFAKE_FORCE_CPU = os.getenv("ANTIFAKE_FORCE_CPU", "1") == "1"
+ANTIFAKE_TARGET_SELECTION = os.getenv("ANTIFAKE_TARGET_SELECTION", "auto")  # auto|random
+ANTIFAKE_RANDOM_TARGETS = int(os.getenv("ANTIFAKE_RANDOM_TARGETS", "8"))
+
+# AntiFake service (separate Python 3.10 microservice)
+ANTIFAKE_SERVICE_URL = os.getenv("ANTIFAKE_SERVICE_URL", "") or None
+ANTIFAKE_SERVICE_TIMEOUT_SECONDS = float(os.getenv("ANTIFAKE_SERVICE_TIMEOUT_SECONDS", "1800"))
+
 # Temp cleanup configuration
 TEMP_CLEANUP_ON_STARTUP = os.getenv("TEMP_CLEANUP_ON_STARTUP", "true").lower() == "true"
 
 # Create necessary directories
-for directory in [TEMP_DIR]:
+for directory in [TEMP_DIR, PROTECT_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 
@@ -115,6 +155,32 @@ class AppConfig:
     # Paths
     MODELS_DIR = MODELS_DIR
     TEMP_DIR = TEMP_DIR
+    PROTECT_DIR = PROTECT_DIR
+
+     # External tools
+    FFMPEG_PATH = FFMPEG_PATH
+
+    # Protection
+    PROTECT_DEFAULT_ATTACK = PROTECT_DEFAULT_ATTACK
+    PROTECT_DEFAULT_EPS = PROTECT_DEFAULT_EPS
+    PROTECT_DEFAULT_STEPS = PROTECT_DEFAULT_STEPS
+    PROTECT_DEFAULT_FRAME_STRIDE = PROTECT_DEFAULT_FRAME_STRIDE
+    PROTECT_MAX_FRAMES = PROTECT_MAX_FRAMES
+    PROTECT_TTL_SECONDS = PROTECT_TTL_SECONDS
+
+    # AntiFake
+    ANTIFAKE_DIR = ANTIFAKE_DIR
+    ANTIFAKE_RUN_PY = ANTIFAKE_RUN_PY
+    ANTIFAKE_SPEAKER_DATABASE = ANTIFAKE_SPEAKER_DATABASE
+    ANTIFAKE_REQUIRED_FILES = ANTIFAKE_REQUIRED_FILES
+    ANTIFAKE_MAX_SECONDS = ANTIFAKE_MAX_SECONDS
+    ANTIFAKE_FORCE_CPU = ANTIFAKE_FORCE_CPU
+    ANTIFAKE_TARGET_SELECTION = ANTIFAKE_TARGET_SELECTION
+    ANTIFAKE_RANDOM_TARGETS = ANTIFAKE_RANDOM_TARGETS
+
+    # AntiFake microservice
+    ANTIFAKE_SERVICE_URL = ANTIFAKE_SERVICE_URL
+    ANTIFAKE_SERVICE_TIMEOUT_SECONDS = ANTIFAKE_SERVICE_TIMEOUT_SECONDS
 
     # Temp cleanup
     TEMP_CLEANUP_ON_STARTUP = TEMP_CLEANUP_ON_STARTUP
