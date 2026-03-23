@@ -12,7 +12,7 @@ import shutil
 
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, AnyHttpUrl, Field
 
@@ -30,6 +30,8 @@ from app.model import (
     get_available_models,
 )
 from app.models_manager import ModelManager
+from app.protection import cleanup_protect_dir
+from app.model import protect_with_foolbox
 
 # Инициализация FastAPI приложения
 app = FastAPI(
@@ -145,11 +147,19 @@ def cleanup_temp_dir() -> int:
     return removed
 
 
+def cleanup_protected_artifacts() -> int:
+    try:
+        return cleanup_protect_dir()
+    except Exception:
+        return 0
+
+
 @app.on_event("startup")
 async def startup_event():
     """Выполняется при старте приложения."""
     if AppConfig.TEMP_CLEANUP_ON_STARTUP:
         cleanup_temp_dir()
+        cleanup_protected_artifacts()
 
     # Инициализируем модели
     success = initialize_models()
@@ -323,6 +333,112 @@ class UrlDetectRequest(BaseModel):
     content_type: Literal["photo", "video", "audio"]
     model: Optional[str] = None
     threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
+
+
+@app.post("/protect", response_class=JSONResponse)
+async def protect(
+    file: UploadFile = File(...),
+    model: Optional[str] = Query(None, description="Model name to use for protection"),
+    content_type: Optional[str] = Query(None, description="Content type: photo|video"),
+    attack: str = Query(AppConfig.PROTECT_DEFAULT_ATTACK, description="Attack name: fgsm|pgd"),
+    eps: float = Query(AppConfig.PROTECT_DEFAULT_EPS, gt=0.0, le=0.2, description="Epsilon for L-infinity attacks"),
+    steps: int = Query(AppConfig.PROTECT_DEFAULT_STEPS, ge=1, le=200, description="Steps for PGD"),
+    frame_stride: int = Query(AppConfig.PROTECT_DEFAULT_FRAME_STRIDE, ge=1, le=30),
+    max_frames: int = Query(AppConfig.PROTECT_MAX_FRAMES, ge=1, le=120),
+):
+    """Apply Foolbox-based perturbation to reduce detectability / increase ambiguity.
+
+    Produces a protected file stored under temp/protected/<id>/output.(png|mp4)
+    and returns a download URL.
+    """
+
+    filename = file.filename or "input"
+    suffix = os.path.splitext(filename)[1].lower()
+    resolved_content_type = _resolve_content_type(content_type, file.content_type, suffix)
+
+    if resolved_content_type not in {"photo", "video"}:
+        raise HTTPException(status_code=400, detail="Only photo and video are supported for protection")
+
+    _ensure_extension_matches_content_type(resolved_content_type, suffix)
+
+    available_models = get_available_models(content_type=resolved_content_type)
+    if not available_models:
+        raise HTTPException(status_code=503, detail=f"No '{resolved_content_type}' models loaded. Service unavailable.")
+
+    if model is None:
+        configured_default = AppConfig.DEFAULT_MODEL_BY_CONTENT.get(resolved_content_type)
+        model = configured_default if configured_default in available_models else available_models[0]
+
+    if model not in available_models:
+        raise HTTPException(status_code=404, detail=f"Model '{model}' is not available for '{resolved_content_type}'")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(content) > AppConfig.MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File too large. Max size: {AppConfig.MAX_FILE_SIZE / 1024 / 1024:.0f} MB")
+
+    if attack not in {"fgsm", "pgd"}:
+        raise HTTPException(status_code=400, detail="Unsupported attack. Use 'fgsm' or 'pgd'.")
+
+    default_suffix = ".png" if resolved_content_type == "photo" else ".mp4"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or default_suffix, dir=AppConfig.TEMP_DIR) as tmp:
+        tmp.write(content)
+        tmp.flush()
+        tmp_path = tmp.name
+
+    try:
+        out_path, meta = protect_with_foolbox(
+            content_type=resolved_content_type,
+            input_path=tmp_path,
+            model_name=model,
+            attack=attack,
+            eps=float(eps),
+            steps=int(steps),
+            frame_stride=int(frame_stride),
+            max_frames=int(max_frames),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        # Some TF/Foolbox errors may have empty str(); include repr for diagnostics.
+        raise HTTPException(status_code=500, detail=f"Protection failed: {exc!r}")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    protect_id = meta.get("protect_id")
+    return {
+        "protect_id": protect_id,
+        "content_type": resolved_content_type,
+        "model": model,
+        "attack": attack,
+        "eps": float(eps),
+        "steps": int(steps),
+        "download_url": f"/protect/{protect_id}/download",
+    }
+
+
+@app.get("/protect/{protect_id}/download")
+async def download_protected(protect_id: str):
+    base_dir = Path(AppConfig.PROTECT_DIR)
+    run_dir = base_dir / protect_id
+    if not run_dir.exists() or not run_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Unknown protect_id")
+
+    # Prefer output.*
+    candidates = list(run_dir.glob("output.*"))
+    if not candidates:
+        raise HTTPException(status_code=404, detail="Protected output not found")
+    output = candidates[0]
+    media_type, _ = mimetypes.guess_type(str(output))
+    return FileResponse(
+        str(output),
+        media_type=media_type or "application/octet-stream",
+        filename=output.name,
+    )
 
 
 def _validate_model_selection(model: Optional[str], content_type: str) -> list:

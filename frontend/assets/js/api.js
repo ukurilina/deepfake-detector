@@ -90,3 +90,36 @@ export async function analyzeFileByUrl({ url, model, threshold, contentType }) {
     }),
   });
 }
+
+export async function protectFile({ file, contentType, model, attack, eps, steps, maxFrames }) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const params = new URLSearchParams();
+  if (contentType) {
+    params.set("content_type", contentType);
+  }
+  if (model) {
+    params.set("model", model);
+  }
+  if (attack) {
+    params.set("attack", attack);
+  }
+  if (typeof eps === "number" && !Number.isNaN(eps)) {
+    params.set("eps", String(eps));
+  }
+  if (typeof steps === "number" && !Number.isNaN(steps)) {
+    params.set("steps", String(steps));
+  }
+  if (contentType === "video" && typeof maxFrames === "number" && !Number.isNaN(maxFrames)) {
+    params.set("max_frames", String(maxFrames));
+  }
+
+  const query = params.toString();
+  const endpoint = `${APP_CONFIG.API_BASE_URL}/protect${query ? `?${query}` : ""}`;
+  return fetchJson(endpoint, {
+    method: "POST",
+    body: formData,
+  });
+}
+

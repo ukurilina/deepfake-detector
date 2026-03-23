@@ -98,6 +98,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+services/antifake_service/.venv310/
 env/
 venv/
 ENV/

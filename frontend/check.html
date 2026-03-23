@@ -58,7 +58,19 @@
               </div>
 
               <div class="form-row">
-                <label for="thresholdInput">Порог срабатывания (%)</label>
+                <label for="thresholdInput" class="label-with-help">
+                  Порог срабатывания (%)
+                  <span class="help" tabindex="0" role="button" aria-label="Что такое порог срабатывания?">
+                    <span class="help-icon" aria-hidden="true">?</span>
+                    <span class="help-popover" role="tooltip">
+                      <strong>Порог срабатывания</strong>
+                      <span>
+                        Влияет только на <b>вердикт</b>. Если вероятность выше порога — результат будет отмечен как
+                        «дипфейк». Если ниже — «оригинал». Сама вероятность при этом не меняется.
+                      </span>
+                    </span>
+                  </span>
+                </label>
                 <input id="thresholdInput" type="number" min="0" max="100" step="1" value="50" />
               </div>
 
@@ -93,7 +105,19 @@
               </div>
 
               <div class="form-row">
-                <label for="thresholdInputUrl">Порог срабатывания (%)</label>
+                <label for="thresholdInputUrl" class="label-with-help">
+                  Порог срабатывания (%)
+                  <span class="help" tabindex="0" role="button" aria-label="Что такое порог срабатывания?">
+                    <span class="help-icon" aria-hidden="true">?</span>
+                    <span class="help-popover" role="tooltip">
+                      <strong>Порог срабатывания</strong>
+                      <span>
+                        Влияет только на <b>вердикт</b>. Если вероятность выше порога — результат будет отмечен как
+                        «дипфейк». Если ниже — «оригинал». Сама вероятность при этом не меняется.
+                      </span>
+                    </span>
+                  </span>
+                </label>
                 <input id="thresholdInputUrl" type="number" min="0" max="100" step="1" value="50" />
               </div>
 

@@ -11,9 +11,10 @@
       <header class="header">
         <div>
           <div class="brand">Deepfake Detector</div>
-          <h1 class="page-title">Выберите действие</h1>
+          <h1 class="page-title">Проверка и защита от дипфейков</h1>
           <p class="subtitle">
-            Этот интерфейс подключается к FastAPI backend и моделям в папке <code>models/</code>.
+            Загрузите файл или укажите ссылку — сервис поможет оценить вероятность дипфейка и, при необходимости,
+            применить защиту, чтобы усложнить создание дипфейка на основе вашего материала.
           </p>
         </div>
       </header>
@@ -22,17 +23,25 @@
         <a class="card action-card" href="./check.html">
           <span class="badge">MVP</span>
           <div class="action-title">Проверить файл на дипфейк</div>
-          <div class="action-text">Загрузите фото и получите вероятность дипфейка от активной модели.</div>
+          <div class="action-text">
+            Загрузите фото или видео и получите результат проверки. При необходимости можно настроить порог
+            срабатывания и посмотреть спорные области.
+          </div>
         </a>
 
         <a class="card action-card" href="./protect.html">
-          <span class="badge warning">Скоро</span>
+          <span class="badge">MVP</span>
           <div class="action-title">Защитить мой файл от создания дипфейка</div>
-          <div class="action-text">Заглушка для будущей функции backend.</div>
+          <div class="action-text">
+            Примените защиту к фото, видео или аудио и скачайте защищённый файл. Функция добавляет малозаметные
+            изменения, которые мешают обучению дипфейк‑моделей.
+          </div>
         </a>
       </section>
 
-      <p class="footer-note">Copyright <span id="currentYear"></span> Deepfake Detector.</p>
+      <footer class="page-footer">
+        <p class="footer-note">Copyright <span id="currentYear"></span> Deepfake Detector.</p>
+      </footer>
     </main>
 
     <script type="module" src="./assets/js/main.js"></script>

@@ -12,29 +12,98 @@
         <div>
           <div class="brand">Deepfake Detector</div>
           <h1 class="page-title">Защита файла от создания дипфейка</h1>
-          <p class="subtitle">Эта возможность backend пока не реализована, поэтому экран работает как заглушка.</p>
+          <p class="subtitle">Наложение защитного шума на фото/видео/аудио.</p>
         </div>
         <a class="nav-link" href="./index.html">На главную</a>
       </header>
 
       <section class="card">
-        <div class="option disabled">
-          <div>
-            <strong>Загрузка и преобразование файла</strong>
-            <div class="muted">Ожидается реализация endpoint в backend.</div>
-          </div>
-          <span class="badge warning">Скоро</span>
-        </div>
-
         <div class="upload-panel">
           <div class="form-row">
+            <label for="protectContentType">Тип контента</label>
+            <select id="protectContentType">
+              <option value="photo">Фото</option>
+              <option value="video">Видео</option>
+              <option value="audio">Аудио</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="protectAttack" class="label-with-help">
+              Метод защиты
+              <span class="help" tabindex="0" role="button" aria-label="Что такое метод защиты?">
+                <span class="help-icon" aria-hidden="true">?</span>
+                <span class="help-popover" role="tooltip">
+                  <strong>Метод защиты</strong>
+                  <span>
+                    <b>FGSM</b> — быстрый вариант. <b>PGD</b> — более устойчивый, но работает дольше.
+                  </span>
+                </span>
+              </span>
+            </label>
+            <select id="protectAttack">
+              <option value="fgsm">FGSM (быстро)</option>
+              <option value="pgd">PGD (качественнее, дольше)</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="protectEps" class="label-with-help">
+              Сила защиты
+              <span class="help" tabindex="0" role="button" aria-label="Что такое сила защиты?">
+                <span class="help-icon" aria-hidden="true">?</span>
+                <span class="help-popover" role="tooltip">
+                  <strong>Сила защиты</strong>
+                  <span>
+                    Чем больше значение, тем сильнее защита (и тем выше шанс заметных изменений). Обычно достаточно 0.01.
+                  </span>
+                </span>
+              </span>
+            </label>
+            <input id="protectEps" type="number" min="0.001" max="0.2" step="0.001" value="0.01" />
+          </div>
+
+          <div class="form-row">
+            <label for="protectSteps" class="label-with-help">
+              Шаги
+              <span class="help" tabindex="0" role="button" aria-label="Что такое шаги?">
+                <span class="help-icon" aria-hidden="true">?</span>
+                <span class="help-popover" role="tooltip">
+                  <strong>Шаги</strong>
+                  <span>
+                    Используется только для <b>PGD</b>. Больше шагов — более «сильная» защита, но больше время обработки.
+                  </span>
+                </span>
+              </span>
+            </label>
+            <input id="protectSteps" type="number" min="1" max="200" step="1" value="10" />
+          </div>
+
+          <div class="form-row" id="videoOptions" style="display: none;">
+            <label for="protectMaxFrames" class="label-with-help">
+              Макс. кадров
+              <span class="help" tabindex="0" role="button" aria-label="Что такое максимальное число кадров?">
+                <span class="help-icon" aria-hidden="true">?</span>
+                <span class="help-popover" role="tooltip">
+                  <strong>Макс. кадров</strong>
+                  <span>
+                    Ограничивает количество кадров, которые будут обработаны (для ускорения). Например, 24 — это первые 24 кадра.
+                  </span>
+                </span>
+              </span>
+            </label>
+            <input id="protectMaxFrames" type="number" min="1" max="120" step="1" value="24" />
+          </div>
+
+          <div class="form-row">
             <label for="protectInput">Выберите файл</label>
-            <input id="protectInput" type="file" disabled />
+            <input id="protectInput" type="file" />
           </div>
           <div class="button-row">
-            <button id="protectButton" type="button" disabled>Защитить файл</button>
+            <button id="protectButton" type="button">Защитить файл</button>
+            <button id="protectDownload" type="button" style="display:none;">Скачать результат</button>
           </div>
-          <div id="status" class="status" role="status" aria-live="polite">Функция недоступна в текущем backend.</div>
+          <div id="status" class="status" role="status" aria-live="polite"></div>
         </div>
       </section>
     </main>

@@ -54,6 +54,49 @@ deepfake_detector/
 └── README.md              # This file
 ```
 
+### Two-service architecture (Python 3.12 + Python 3.10)
+
+Audio protection via **AntiFake** is isolated into a separate web-service.
+The main backend runs on **Python 3.12**, while AntiFake stack requires **Python 3.10**.
+
+Services:
+
+- **deepfake-api** (Python 3.12): main backend.
+- **antifake-service** (Python 3.10): audio protection wrapper for `thirdparty/AntiFake`.
+
+Main backend delegates audio protection to the service via `ANTIFAKE_SERVICE_URL`.
+
+#### Run with Docker Compose
+
+> Requires Docker Desktop / Docker Engine running.
+
+```bash
+docker compose up --build
+```
+
+In compose, the backend is configured with:
+
+- `ANTIFAKE_SERVICE_URL=http://antifake-service:8010`
+
+#### Run locally without Docker
+
+1) Run `antifake-service` using Python 3.10:
+
+```bash
+cd services/antifake_service
+python -m venv .venv310
+# activate the venv and then:
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8010
+```
+
+2) Run `deepfake-api` using Python 3.12 and point it to the service:
+
+```bash
+set ANTIFAKE_SERVICE_URL=http://localhost:8010
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
 ### Component Overview
 
 - **main.py**: FastAPI application with endpoints
