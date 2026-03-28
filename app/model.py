@@ -1188,8 +1188,8 @@ def _predict_with_loaded_model(model, image_tensor: np.ndarray, fft_tensor: np.n
     return _extract_probability(preds)
 
 
-def _calibrate_probability(raw_prob: float, content_type: str) -> float:
-    pivot = float(AppConfig.CALIBRATION_PIVOT_BY_CONTENT.get(content_type, 0.5))
+def _calibrate_probability(raw_prob: float, model_name: str) -> float:
+    pivot = float(AppConfig.CALIBRATION_PIVOT_BY_MODEL.get(model_name, 0.5))
     pivot = max(1e-6, min(1.0 - 1e-6, pivot))
 
     prob = max(0.0, min(1.0, float(raw_prob)))
@@ -1224,7 +1224,7 @@ def predict_deepfake_probability(
     )
     preds = model.predict(model_inputs, verbose=0)
     raw_prob = _extract_probability(preds)
-    prob = _calibrate_probability(raw_prob, "photo")
+    prob = _calibrate_probability(raw_prob, selected_model)
     label = "deepfake" if prob >= threshold else "real"
 
     result = {
@@ -1270,7 +1270,7 @@ def predict_video_deepfake_probability(
 
     preds = model.predict(model_inputs, verbose=0)
     raw_prob = _extract_probability(preds)
-    prob = _calibrate_probability(raw_prob, "video")
+    prob = _calibrate_probability(raw_prob, selected_model)
     label = "deepfake" if prob >= threshold else "real"
 
     result = {
@@ -1308,7 +1308,7 @@ def predict_audio_deepfake_probability(
     audio_batch, meta = preprocess_audio_for_model(audio_path, model)
     preds = model.predict(audio_batch, verbose=0)
     raw_prob = _extract_probability(preds)
-    prob = _calibrate_probability(raw_prob, "audio")
+    prob = _calibrate_probability(raw_prob, selected_model)
     label = "deepfake" if prob >= threshold else "real"
 
     return {

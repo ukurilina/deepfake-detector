@@ -14,17 +14,25 @@ CONTENT_TYPES = ("photo", "video", "audio")
 
 # Each model is tied to one specific content type.
 MODEL_REGISTRY = {
-    "model_photo": {
+    "проверка фото": {
         "file_name": "model_photo.keras",
         "content_type": "photo",
+        "calibration_pivot": 0.6515938,
     },
-    "model_video": {
+    "альтернативная проверка фото": {
+        "file_name": "model_photo_strict.keras",
+        "content_type": "photo",
+        "calibration_pivot": 0.027091859,
+    },
+    "проверка видео": {
         "file_name": "model_video.keras",
         "content_type": "video",
+        "calibration_pivot": 0.52268463,
     },
-    "model_audio": {
+    "проверка аудио": {
         "file_name": "model_audio.keras",
         "content_type": "audio",
+        "calibration_pivot": 0.6681531,
     },
 }
 
@@ -34,10 +42,14 @@ DEFAULT_MODEL_BY_CONTENT = {
     "audio": "model_audio",
 }
 
+CALIBRATION_PIVOT_BY_MODEL = {
+    model_name: float(spec.get("calibration_pivot", 0.5))
+    for model_name, spec in MODEL_REGISTRY.items()
+}
+# Backward-compatible view: one pivot per content type, derived from the default model.
 CALIBRATION_PIVOT_BY_CONTENT = {
-    "photo": 0.6515938,
-    "video": 0.52268463,
-    "audio": 0.6681531,
+    content_type: float(CALIBRATION_PIVOT_BY_MODEL.get(default_model, 0.5))
+    for content_type, default_model in DEFAULT_MODEL_BY_CONTENT.items()
 }
 
 ALLOWED_MODEL_FILES = tuple(spec["file_name"] for spec in MODEL_REGISTRY.values())
@@ -141,6 +153,7 @@ class AppConfig:
     MODEL_REGISTRY = MODEL_REGISTRY
     CONTENT_TYPES = CONTENT_TYPES
     DEFAULT_MODEL_BY_CONTENT = DEFAULT_MODEL_BY_CONTENT
+    CALIBRATION_PIVOT_BY_MODEL = CALIBRATION_PIVOT_BY_MODEL
     CALIBRATION_PIVOT_BY_CONTENT = CALIBRATION_PIVOT_BY_CONTENT
     ALLOWED_MODEL_FILES = ALLOWED_MODEL_FILES
     USE_GPU = USE_GPU
@@ -196,6 +209,7 @@ class AppConfig:
             "max_file_size": cls.MAX_FILE_SIZE,
             "content_types": list(CONTENT_TYPES),
             "default_model_by_content": DEFAULT_MODEL_BY_CONTENT,
+            "calibration_pivot_by_model": CALIBRATION_PIVOT_BY_MODEL,
             "calibration_pivot_by_content": CALIBRATION_PIVOT_BY_CONTENT,
             "supported_image_types": list(SUPPORTED_IMAGE_EXTENSIONS),
             "supported_video_types": list(SUPPORTED_VIDEO_EXTENSIONS),

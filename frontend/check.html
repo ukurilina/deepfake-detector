@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="./assets/css/styles.css" />
   </head>
   <body>
-    <main class="container">
+    <main class="container page">
       <header class="header">
         <div>
           <div class="brand">Deepfake Detector</div>
@@ -16,154 +16,165 @@
         <a class="nav-link" href="./index.html">На главную</a>
       </header>
 
-      <section class="card">
-        <div class="option-list" role="tablist" aria-label="Выбор способа загрузки">
-          <button id="modeFileButton" class="option option-button active" type="button" role="tab" aria-selected="true">
-            <span>
-              <strong>Загрузить файл с компьютера</strong>
-            </span>
-            <span class="badge">Доступно</span>
-          </button>
+      <div class="page-body">
+        <section class="card panel two-col">
+          <div class="panel-side">
+            <div class="tile-grid" role="tablist" aria-label="Выбор способа загрузки">
+              <button id="modeFileButton" class="tile option option-button active" type="button" role="tab" aria-selected="true">
+                <span class="icon">ПК</span>
+                <span>
+                  <div class="title">Загрузить файл</div>
+                  <div class="desc">Фото / видео / аудио с компьютера</div>
+                </span>
+              </button>
 
-          <button id="modeUrlButton" class="option option-button" type="button" role="tab" aria-selected="false">
-            <span>
-              <strong>Проверить файл по URL</strong>
-            </span>
-            <span class="badge">Доступно</span>
-          </button>
-        </div>
-
-        <div class="upload-panel">
-          <section id="fileSection">
-            <form id="detectForm" novalidate>
-              <div class="form-row">
-                <label for="fileContentTypeSelect">Тип контента</label>
-                <select id="fileContentTypeSelect" required>
-                  <option value="photo" selected>Фото</option>
-                  <option value="video">Видео</option>
-                  <option value="audio">Аудио</option>
-                </select>
-              </div>
-
-              <div class="form-row">
-                <label for="fileInput" id="fileInputLabel">Файл изображения</label>
-                <input id="fileInput" type="file" accept="image/*" required />
-              </div>
-
-              <div class="form-row">
-                <label for="modelSelect">Модель (необязательно)</label>
-                <select id="modelSelect">
-                  <option value="">Загрузка моделей...</option>
-                </select>
-              </div>
-
-              <div class="form-row">
-                <label for="thresholdInput" class="label-with-help">
-                  Порог срабатывания (%)
-                  <span class="help" tabindex="0" role="button" aria-label="Что такое порог срабатывания?">
-                    <span class="help-icon" aria-hidden="true">?</span>
-                    <span class="help-popover" role="tooltip">
-                      <strong>Порог срабатывания</strong>
-                      <span>
-                        Влияет только на <b>вердикт</b>. Если вероятность выше порога — результат будет отмечен как
-                        «дипфейк». Если ниже — «оригинал». Сама вероятность при этом не меняется.
-                      </span>
-                    </span>
-                  </span>
-                </label>
-                <input id="thresholdInput" type="number" min="0" max="100" step="1" value="50" />
-              </div>
-
-              <div class="button-row">
-                <button id="submitButton" type="submit">Проверить изображение</button>
-                <button id="resetButton" class="secondary" type="button">Сброс</button>
-              </div>
-            </form>
-          </section>
-
-          <section id="urlSection" class="hidden">
-            <form id="urlForm" novalidate>
-              <div class="form-row">
-                <label for="urlInput">Ссылка на файл</label>
-                <input id="urlInput" type="url" placeholder="https://..." required />
-              </div>
-
-              <div class="form-row">
-                <label for="urlContentTypeSelect">Тип контента</label>
-                <select id="urlContentTypeSelect" required>
-                  <option value="photo" selected>Фото</option>
-                  <option value="video">Видео</option>
-                  <option value="audio">Аудио</option>
-                </select>
-              </div>
-
-              <div class="form-row">
-                <label for="urlModelSelect">Модель (необязательно)</label>
-                <select id="urlModelSelect">
-                  <option value="">Загрузка моделей...</option>
-                </select>
-              </div>
-
-              <div class="form-row">
-                <label for="thresholdInputUrl" class="label-with-help">
-                  Порог срабатывания (%)
-                  <span class="help" tabindex="0" role="button" aria-label="Что такое порог срабатывания?">
-                    <span class="help-icon" aria-hidden="true">?</span>
-                    <span class="help-popover" role="tooltip">
-                      <strong>Порог срабатывания</strong>
-                      <span>
-                        Влияет только на <b>вердикт</b>. Если вероятность выше порога — результат будет отмечен как
-                        «дипфейк». Если ниже — «оригинал». Сама вероятность при этом не меняется.
-                      </span>
-                    </span>
-                  </span>
-                </label>
-                <input id="thresholdInputUrl" type="number" min="0" max="100" step="1" value="50" />
-              </div>
-
-              <div class="button-row">
-                <button id="urlSubmitButton" type="submit">Проверить по URL</button>
-                <button id="urlResetButton" class="secondary" type="button">Сброс</button>
-              </div>
-            </form>
-          </section>
-
-          <div id="status" class="status" role="status" aria-live="polite"></div>
-
-          <section id="result" class="result hidden">
-            <h3>Результат проверки</h3>
-            <div class="result-grid">
-              <div class="kv"><strong>Вероятность</strong><span id="resultPercent">Н/Д</span></div>
-              <div class="kv"><strong>Вердикт</strong><span id="resultVerdict">Н/Д</span></div>
-              <div class="kv"><strong>Метка</strong><span id="resultLabel">Н/Д</span></div>
-              <div class="kv"><strong>Используемая модель</strong><span id="resultModel">Н/Д</span></div>
-              <div class="kv"><strong>Порог срабатывания</strong><span id="resultThreshold">Н/Д</span></div>
+              <button id="modeUrlButton" class="tile option option-button" type="button" role="tab" aria-selected="false">
+                <span class="icon">URL</span>
+                <span>
+                  <div class="title">Проверить по ссылке</div>
+                  <div class="desc">HTTP/HTTPS ссылка на файл</div>
+                </span>
+              </button>
             </div>
 
-            <section id="heatmapSection" class="heatmap-panel hidden" aria-live="polite">
-              <h4>Карта внимания</h4>
+            <div class="upload-panel">
+              <section id="fileSection">
+                <form id="detectForm" novalidate>
+                  <div class="form-row">
+                    <label for="fileContentTypeSelect">Тип контента</label>
+                    <select id="fileContentTypeSelect" required>
+                      <option value="photo" selected>Фото</option>
+                      <option value="video">Видео</option>
+                      <option value="audio">Аудио</option>
+                    </select>
+                  </div>
 
-              <div id="regionsSection" class="regions-panel hidden">
-                <h4>Спорные области на исходном изображении</h4>
-                <canvas id="regionsCanvas" class="heatmap-canvas" width="256" height="256"></canvas>
-                <div id="regionsMeta" class="muted"></div>
+                  <div class="form-row">
+                    <label for="fileInput" id="fileInputLabel">Файл изображения</label>
+                    <input id="fileInput" type="file" accept="image/*" required />
+                  </div>
+
+                  <div class="form-row">
+                    <label for="modelSelect">Модель (необязательно)</label>
+                    <select id="modelSelect">
+                      <option value="">Загрузка моделей...</option>
+                    </select>
+                  </div>
+
+                  <div class="form-row">
+                    <label for="thresholdInput" class="label-with-help">
+                      Порог срабатывания (%)
+                      <span class="help" tabindex="0" role="button" aria-label="Что такое порог срабатывания?">
+                        <span class="help-icon" aria-hidden="true">?</span>
+                        <span class="help-popover" role="tooltip">
+                          <strong>Порог срабатывания</strong>
+                          <span>
+                            Влияет только на <b>вердикт</b>. Если вероятность выше порога — результат будет отмечен как
+                            «дипфейк». Если ниже — «оригинал». Сама вероятность при этом не меняется.
+                          </span>
+                        </span>
+                      </span>
+                    </label>
+                    <input id="thresholdInput" type="number" min="0" max="100" step="1" value="50" />
+                  </div>
+
+                  <div class="button-row">
+                    <button id="submitButton" type="submit">Проверить</button>
+                    <button id="resetButton" class="secondary" type="button">Сброс</button>
+                  </div>
+                </form>
+              </section>
+
+              <section id="urlSection" class="hidden">
+                <form id="urlForm" novalidate>
+                  <div class="form-row">
+                    <label for="urlInput">Ссылка на файл</label>
+                    <input id="urlInput" type="url" placeholder="https://..." required />
+                  </div>
+
+                  <div class="form-row">
+                    <label for="urlContentTypeSelect">Тип контента</label>
+                    <select id="urlContentTypeSelect" required>
+                      <option value="photo" selected>Фото</option>
+                      <option value="video">Видео</option>
+                      <option value="audio">Аудио</option>
+                    </select>
+                  </div>
+
+                  <div class="form-row">
+                    <label for="urlModelSelect">Модель (необязательно)</label>
+                    <select id="urlModelSelect">
+                      <option value="">Загрузка моделей...</option>
+                    </select>
+                  </div>
+
+                  <div class="form-row">
+                    <label for="thresholdInputUrl" class="label-with-help">
+                      Порог срабатывания (%)
+                      <span class="help" tabindex="0" role="button" aria-label="Что такое порог срабатывания?">
+                        <span class="help-icon" aria-hidden="true">?</span>
+                        <span class="help-popover" role="tooltip">
+                          <strong>Порог срабатывания</strong>
+                          <span>
+                            Влияет только на <b>вердикт</b>. Если вероятность выше порога — результат будет отмечен как
+                            «дипфейк». Если ниже — «оригинал». Сама вероятность при этом не меняется.
+                          </span>
+                        </span>
+                      </span>
+                    </label>
+                    <input id="thresholdInputUrl" type="number" min="0" max="100" step="1" value="50" />
+                  </div>
+
+                  <div class="button-row">
+                    <button id="urlSubmitButton" type="submit">Проверить</button>
+                    <button id="urlResetButton" class="secondary" type="button">Сброс</button>
+                  </div>
+                </form>
+              </section>
+
+              <div id="status" class="status" role="status" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <div class="panel-main">
+            <section id="resultPlaceholder" class="result-placeholder">
+              <div>
+                <h3 class="ph-title">Здесь появится результат проверки</h3>
+                <p class="ph-text">
+                  Выберите тип контента, загрузите файл или вставьте URL — затем нажмите «Проверить». Мы покажем
+                  вероятность и вердикт, а для фото/видео — карту внимания.
+                </p>
+
+                <div class="preview-kv" aria-hidden="true">
+                  <div class="kv"><strong>Вероятность</strong><span>—</span></div>
+                  <div class="kv"><strong>Метка</strong><span>—</span></div>
+                  <div class="kv"><strong>Используемая модель</strong><span>—</span></div>
+                  <div class="kv"><strong>Порог срабатывания</strong><span>—</span></div>
+                </div>
               </div>
-
-              <canvas id="heatmapCanvas" class="heatmap-canvas" width="256" height="256"></canvas>
-              <div id="heatmapMeta" class="muted"></div>
-
-              <div id="videoHeatmapControls" class="heatmap-controls hidden">
-                <button id="heatmapPrevFrame" class="secondary" type="button">Предыдущий кадр</button>
-                <label for="heatmapFrameRange" class="muted">Кадр</label>
-                <input id="heatmapFrameRange" type="range" min="0" max="0" step="1" value="0" />
-                <button id="heatmapNextFrame" class="secondary" type="button">Следующий кадр</button>
-              </div>
-
-              <div id="heatmapFrameIndicator" class="muted"></div>
             </section>
-          </section>
-        </div>
-      </section>
+
+            <section id="result" class="result hidden">
+              <h3>Результат проверки</h3>
+              <div class="result-grid">
+                <div class="kv"><strong>Вероятность</strong><span id="resultPercent">Н/Д</span></div>
+                <div class="kv"><strong>Метка</strong><span id="resultLabel">Н/Д</span></div>
+                <div class="kv"><strong>Используемая модель</strong><span id="resultModel">Н/Д</span></div>
+                <div class="kv"><strong>Порог срабатывания</strong><span id="resultThreshold">Н/Д</span></div>
+              </div>
+
+              <section id="heatmapSection" class="heatmap-panel hidden" aria-live="polite">
+                <h4>Спорные области</h4>
+
+                <div id="regionsSection" class="regions-panel hidden">
+                  <canvas id="regionsCanvas" class="heatmap-canvas" width="256" height="256"></canvas>
+                  <div id="regionsMeta" class="muted"></div>
+                </div>
+              </section>
+            </section>
+          </div>
+        </section>
+      </div>
     </main>
 
     <script type="module" src="./assets/js/check.js"></script>

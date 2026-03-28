@@ -102,7 +102,11 @@ class ModelManager:
             )
         else:
             load_attempts = (
+                (keras.models.load_model, {"compile": False, "safe_mode": False}),
+                (keras.models.load_model, {"compile": False}),
+                (tf.keras.models.load_model, {"compile": False, "safe_mode": False}),
                 (tf.keras.models.load_model, {"compile": False}),
+                (keras.models.load_model, {"safe_mode": False}),
                 (tf.keras.models.load_model, {}),
             )
 
@@ -121,38 +125,48 @@ class ModelManager:
                 mode = f"{loader.__module__}.{loader.__name__}({kwargs if kwargs else 'default'})"
                 errors.append(f"{mode}: {exc}")
 
-        if audio_custom_objects:
-            sanitized_path = None
-            try:
-                sanitized_path = _build_sanitized_keras_archive(model_path)
-                sanitized_custom_objects = get_audio_custom_objects(include_ops=False)
+        sanitized_path = None
+        try:
+            sanitized_path = _build_sanitized_keras_archive(model_path)
+            sanitized_custom_objects = get_audio_custom_objects(include_ops=False) if audio_custom_objects else None
+
+            if sanitized_custom_objects:
                 sanitized_attempts = (
                     (keras.models.load_model, {"compile": False, "custom_objects": sanitized_custom_objects, "safe_mode": False}),
                     (keras.models.load_model, {"compile": False, "custom_objects": sanitized_custom_objects}),
                     (tf.keras.models.load_model, {"compile": False, "custom_objects": sanitized_custom_objects, "safe_mode": False}),
                     (tf.keras.models.load_model, {"compile": False, "custom_objects": sanitized_custom_objects}),
                 )
+            else:
+                sanitized_attempts = (
+                    (keras.models.load_model, {"compile": False, "safe_mode": False}),
+                    (keras.models.load_model, {"compile": False}),
+                    (tf.keras.models.load_model, {"compile": False, "safe_mode": False}),
+                    (tf.keras.models.load_model, {"compile": False}),
+                )
 
-                for loader, kwargs in sanitized_attempts:
-                    try:
-                        model = loader(sanitized_path, **kwargs)
-                        self._models[model_name] = model
-                        self._model_configs[model_name] = {
-                            "path": model_path,
-                            "content_type": content_type,
-                            "loaded": True,
-                            "error": None,
-                        }
-                        return True
-                    except Exception as exc:
-                        mode = f"sanitized:{loader.__module__}.{loader.__name__}({kwargs if kwargs else 'default'})"
-                        errors.append(f"{mode}: {exc}")
-            finally:
-                if sanitized_path and os.path.exists(sanitized_path):
-                    try:
-                        os.unlink(sanitized_path)
-                    except OSError:
-                        pass
+            for loader, kwargs in sanitized_attempts:
+                try:
+                    model = loader(sanitized_path, **kwargs)
+                    self._models[model_name] = model
+                    self._model_configs[model_name] = {
+                        "path": model_path,
+                        "content_type": content_type,
+                        "loaded": True,
+                        "error": None,
+                    }
+                    return True
+                except Exception as exc:
+                    mode = f"sanitized:{loader.__module__}.{loader.__name__}({kwargs if kwargs else 'default'})"
+                    errors.append(f"{mode}: {exc}")
+        except Exception as exc:
+            errors.append(f"sanitize_archive_failed: {exc}")
+        finally:
+            if sanitized_path and os.path.exists(sanitized_path):
+                try:
+                    os.unlink(sanitized_path)
+                except OSError:
+                    pass
 
         self._model_configs[model_name] = {
             "path": model_path,

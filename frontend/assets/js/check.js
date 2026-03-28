@@ -2,7 +2,6 @@ import { APP_CONFIG } from "./config.js";
 import { analyzeFileByUrl, detectFile, fetchModelsByContentType } from "./api.js";
 import {
   buildVerdict,
-  drawHeatmapToCanvas,
   drawImageRegions,
   findSuspiciousRegions,
   resetHeatmapView,
@@ -134,80 +133,17 @@ function getHeatmapSizeLabel(heatmap) {
   return `${heatmap[0].length}x${heatmap.length}`;
 }
 
-function renderVideoHeatmapFrame(frameIndex) {
-  const range = document.getElementById("heatmapFrameRange");
-  const indicator = document.getElementById("heatmapFrameIndicator");
-  const meta = document.getElementById("heatmapMeta");
-
-  if (!heatmapState.frameHeatmaps.length) {
-    resetHeatmapView();
-    return;
-  }
-
-  const clampedIndex = Math.max(0, Math.min(heatmapState.frameHeatmaps.length - 1, frameIndex));
-  heatmapState.currentFrameIndex = clampedIndex;
-  const currentHeatmap = heatmapState.frameHeatmaps[clampedIndex];
-
-  const drawn = drawHeatmapToCanvas("heatmapCanvas", currentHeatmap);
-  if (!drawn) {
-    resetHeatmapView();
-    return;
-  }
-
-  if (range) {
-    range.value = String(clampedIndex);
-  }
-  if (indicator) {
-    indicator.textContent = `Кадр ${clampedIndex + 1} из ${heatmapState.frameHeatmaps.length}`;
-  }
-  if (meta) {
-    meta.textContent = `Размер карты: ${getHeatmapSizeLabel(currentHeatmap)}`;
-  }
-}
-
 async function renderHeatmap(result) {
-  const controls = document.getElementById("videoHeatmapControls");
-  const range = document.getElementById("heatmapFrameRange");
+  // В интерфейсе больше не показываем саму карту внимания (heatmap).
+  // Оставляем только исходное изображение с прямоугольниками по «горячим» областям.
 
-  if (result.frameHeatmaps.length) {
-    heatmapState.frameHeatmaps = result.frameHeatmaps;
-    heatmapState.currentFrameIndex = 0;
-    toggleHidden("heatmapSection", false);
-    toggleHidden("videoHeatmapControls", false);
-
-    if (range) {
-      range.min = "0";
-      range.max = String(result.frameHeatmaps.length - 1);
-      range.step = "1";
-      range.value = "0";
-    }
-
-    renderVideoHeatmapFrame(0);
-    toggleHidden("regionsSection", true);
-    setText("regionsMeta", "");
-    return;
-  }
-
-  heatmapState.frameHeatmaps = [];
-  heatmapState.currentFrameIndex = 0;
-
-  if (result.heatmap) {
-    const drawn = drawHeatmapToCanvas("heatmapCanvas", result.heatmap);
-    if (!drawn) {
-      resetHeatmapView();
-      return;
-    }
-
-    toggleHidden("heatmapSection", false);
-    toggleHidden("videoHeatmapControls", true);
-    setText("heatmapMeta", `Размер карты: ${getHeatmapSizeLabel(result.heatmap)}`);
-    setText("heatmapFrameIndicator", "");
-
-    const regions = findSuspiciousRegions(result.heatmap);
-    const hasSourceImage = Boolean(heatmapState.sourceImageUrl);
-    if (regions.length && hasSourceImage) {
-      const heatmapWidth = result.heatmap[0]?.length || 0;
-      const heatmapHeight = result.heatmap.length;
+  const heatmap = result?.heatmap;
+  const hasSourceImage = Boolean(heatmapState.sourceImageUrl);
+  if (validateHeatmap2D(heatmap) && hasSourceImage) {
+    const regions = findSuspiciousRegions(heatmap);
+    if (regions.length) {
+      const heatmapWidth = heatmap[0]?.length || 0;
+      const heatmapHeight = heatmap.length;
       const rendered = await drawImageRegions(
         "regionsCanvas",
         heatmapState.sourceImageUrl,
@@ -216,24 +152,15 @@ async function renderHeatmap(result) {
         heatmapHeight
       );
       if (rendered) {
+        toggleHidden("heatmapSection", false);
         toggleHidden("regionsSection", false);
         setText("regionsMeta", `Найдено спорных областей: ${regions.length}`);
-      } else {
-        toggleHidden("regionsSection", true);
-        setText("regionsMeta", "");
+        return;
       }
-    } else {
-      toggleHidden("regionsSection", true);
-      setText("regionsMeta", "");
     }
-    return;
   }
 
-  if (controls) {
-    toggleHidden("videoHeatmapControls", true);
-  }
-  toggleHidden("regionsSection", true);
-  setText("regionsMeta", "");
+  // Для видео (frameHeatmaps) или если heatmap/картинка недоступны — просто скрываем блок.
   resetHeatmapView();
 }
 
@@ -296,7 +223,7 @@ async function populateModelSelect(select, contentType) {
     }
 
     select.disabled = false;
-    select.innerHTML = '<option value="">Модель по умолчанию</option>';
+    select.innerHTML = '';
     for (const model of models) {
       const option = document.createElement("option");
       option.value = model;
@@ -391,9 +318,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const urlSubmitButton = document.getElementById("urlSubmitButton");
   const thresholdInputUrl = document.getElementById("thresholdInputUrl");
   const urlResetButton = document.getElementById("urlResetButton");
-  const heatmapRange = document.getElementById("heatmapFrameRange");
-  const heatmapPrevFrame = document.getElementById("heatmapPrevFrame");
-  const heatmapNextFrame = document.getElementById("heatmapNextFrame");
 
   const refs = {
     fileInput,
@@ -421,17 +345,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   modeUrlButton?.addEventListener("click", () => setMode("url"));
 
-  heatmapRange?.addEventListener("input", () => {
-    renderVideoHeatmapFrame(Number(heatmapRange.value));
-  });
-
-  heatmapPrevFrame?.addEventListener("click", () => {
-    renderVideoHeatmapFrame(heatmapState.currentFrameIndex - 1);
-  });
-
-  heatmapNextFrame?.addEventListener("click", () => {
-    renderVideoHeatmapFrame(heatmapState.currentFrameIndex + 1);
-  });
 
   fileContentTypeSelect?.addEventListener("change", async () => {
     const contentType = fileContentTypeSelect.value;

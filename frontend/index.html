@@ -7,21 +7,28 @@
     <link rel="stylesheet" href="./assets/css/styles.css" />
   </head>
   <body>
-    <main class="container">
+    <main class="container page">
       <header class="header">
         <div>
           <div class="brand">Deepfake Detector</div>
           <h1 class="page-title">Проверка и защита от дипфейков</h1>
-          <p class="subtitle">
-            Загрузите файл или укажите ссылку — сервис поможет оценить вероятность дипфейка и, при необходимости,
-            применить защиту, чтобы усложнить создание дипфейка на основе вашего материала.
-          </p>
         </div>
       </header>
 
-      <section class="grid">
+      <section class="card" style="margin-bottom: 16px;">
+        <h2 class="hero-title">Быстрая проверка медиа + защита от подделок</h2>
+        <p class="hero-subtitle" style="margin-bottom: 10px;">
+          Загрузите файл или укажите ссылку — сервис оценит вероятность дипфейка и (при необходимости) применит защиту.
+        </p>
+        <ul class="hint-list" style="margin: 0;">
+          <li><b>Проверка:</b> вероятность, вердикт, модель + карта внимания для фото/видео.</li>
+          <li><b>Защита:</b> FGSM/PGD и скачивание результата одной кнопкой.</li>
+        </ul>
+      </section>
+
+      <section class="action-grid">
         <a class="card action-card" href="./check.html">
-          <span class="badge">MVP</span>
+          <div class="card-icon" aria-hidden="true">✓</div>
           <div class="action-title">Проверить файл на дипфейк</div>
           <div class="action-text">
             Загрузите фото или видео и получите результат проверки. При необходимости можно настроить порог
@@ -30,7 +37,7 @@
         </a>
 
         <a class="card action-card" href="./protect.html">
-          <span class="badge">MVP</span>
+          <div class="card-icon" aria-hidden="true">⛨</div>
           <div class="action-title">Защитить мой файл от создания дипфейка</div>
           <div class="action-text">
             Примените защиту к фото, видео или аудио и скачайте защищённый файл. Функция добавляет малозаметные
